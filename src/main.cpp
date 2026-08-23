@@ -1,39 +1,32 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <RadioLib.h>
+#include "config.h"          // ✅ use shared configuration values
 #include "SendOwnInfo.h"
 #include "AXP2101.h"
 #include "U-blox-helper.h"
 #include <math.h>
-int sats = 0;
-char msg[96];
+
 double d = 0.0;
 double b = 0.0;
+
 GpsInfo companion;                 // last parsed companion data (persists)
 bool   haveCompanionFix = false;   // indicates we have valid parsed data at least once
+
 // GPS UART
 HardwareSerial GPSSerial(1);
-static const int GPS_RX_PIN = 34;   // GPS TX -> MCU RX
-static const int GPS_TX_PIN = 12;   // GPS RX -> MCU TX
 
 // --------------------
-// ⚠️  LORA
+// LoRa (SX1262)
 // --------------------
-static const int LORA_NSS  = 18;
-static const int LORA_DIO1 = 33;
-static const int LORA_RST  = 23;
-static const int LORA_BUSY = 32;
-
 SX1262 radio = SX1262(
-    new Module(
-        LORA_NSS,
-        LORA_DIO1,
-        LORA_RST,
-        LORA_BUSY
-    )
+  new Module(
+    LORA_NSS,
+    LORA_DIO1,
+    LORA_RST,
+    LORA_BUSY
+  )
 );
-
-static const float LORA_FREQ = 868.0;
 
 int transmissionState = RADIOLIB_ERR_NONE;
 
@@ -42,7 +35,7 @@ bool transmitFlag = false;
 // flag to indicate that a packet was sent or received
 volatile bool operationDone = false;
 
-#define INITIATING_NODE
+//#define INITIATING_NODE
 
 void setFlag(void) {
   operationDone = true;
@@ -105,15 +98,14 @@ double bearingDegrees(double lat1, double lon1, double lat2, double lon2) {
   return brng;
 }
 
-
 void setup() {
   Serial.begin(115200);
 
   // Power GPS via AXP2101
   AXP2101_beginAndEnableGPSPower();
 
-  // GPS UART
-  GPSSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  // GPS UART (✅ uses config.h: GPS_BAUD, GPS_RX_PIN, GPS_TX_PIN)
+  GPSSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   delay(200);
 
   // Provide GPS serial to u-blox helper module and configure receiver output
@@ -128,6 +120,7 @@ void setup() {
   Serial.println("SX126x Sender starting...");
   SPI.begin(5, 19, 27, 18);
 
+  // ✅ uses config.h: LORA_FREQ
   int state = radio.begin(LORA_FREQ);
   if (state != RADIOLIB_ERR_NONE) {
     Serial.print("radio.begin() failed, code = ");
@@ -193,25 +186,15 @@ void loop() {
       // send own info
       GpsInfo own = prepareAndSendOwnInfo(radio, transmissionState, transmitFlag);
 
-/*
       if (haveCompanionFix && companion.hasData) {
-        Serial.print(companion.lat, 6);
+        d = distanceMeters(own.lat, own.lon, companion.lat, companion.lon);
+        b = bearingDegrees(own.lat, own.lon, companion.lat, companion.lon);
+        Serial.print(d, 6);
         Serial.print(", ");
-        Serial.println(companion.lon, 6);
+        Serial.println(b, 6);
       } else {
         Serial.println("Companion: (no data yet)");
       }
-
-      Serial.print(own.lat, 6);
-      Serial.print(", ");
-      Serial.println(own.lon, 6);
-      transmitFlag = true;
-*/
-      d = distanceMeters(own.lat, own.lon, companion.lat, companion.lon);
-      b = bearingDegrees(own.lat, own.lon, companion.lat, companion.lon);
-      Serial.print(d, 6);
-      Serial.print(", ");
-      Serial.println(b, 6);
     }
   }
 }
