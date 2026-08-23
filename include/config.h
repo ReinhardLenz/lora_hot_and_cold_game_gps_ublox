@@ -6,7 +6,6 @@
 // -------------------------------
 // UART GPS PIN
 // -------------------------------
-
 static constexpr int GPS_RX_PIN = 34;     // GPS TX -> ESP32 RX
 static constexpr int GPS_TX_PIN = 12;     // GPS RX -> ESP32 TX
 static constexpr uint32_t GPS_BAUD = 9600;
@@ -21,10 +20,19 @@ static constexpr int LORA_BUSY = 32;      // BUSY
 
 static constexpr float LORA_FREQ = 868.0; // must match receiver
 
+// --------------------
+// SPI bus pins (ESP32 -> SX1262 on T-Beam V1.2)
+// SPI.begin(SCK, MISO, MOSI, SS)
+// --------------------
+static constexpr int SPI_SCK_PIN  = 5;
+static constexpr int SPI_MISO_PIN = 19;
+static constexpr int SPI_MOSI_PIN = 27;
+// You can reuse LORA_NSS as the SPI "SS" default pin:
+static constexpr int SPI_SS_PIN   = LORA_NSS;
 
-/*
+#endif
 
-// -------------------------------
+/*// -------------------------------
 // UART
 // -------------------------------
 constexpr uint32_t PC_BAUD  = 115200;
@@ -57,4 +65,3 @@ constexpr uint32_t RESET_TIME_MS = 10;
 constexpr uint32_t BLINK_DELAY   = 200;
 */
 
-#endif

@@ -62,7 +62,7 @@ void setup() {
 
   // LoRa init
   Serial.println("SX126x Sender starting...");
-  SPI.begin(5, 19, 27, 18);
+  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, SPI_SS_PIN);
 
   int state = radio.begin(LORA_FREQ);
   if (state != RADIOLIB_ERR_NONE) {
