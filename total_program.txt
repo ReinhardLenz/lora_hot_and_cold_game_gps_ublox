@@ -65,6 +65,55 @@ void AXP2101_beginAndEnableGPSPower() {
 // Prints status messages to Serial (same as your original setup() code).
 void AXP2101_beginAndEnableGPSPower();
 
+// Content from NavigationMath.cpp
+#include "NavigationMath.h"
+#include <math.h>
+
+static inline double deg2rad(double deg) { return deg * (M_PI / 180.0); }
+static inline double rad2deg(double rad) { return rad * (180.0 / M_PI); }
+
+double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
+  const double R = 6371000.0; // Earth radius in meters
+
+  double phi1 = deg2rad(lat1);
+  double phi2 = deg2rad(lat2);
+  double dphi = deg2rad(lat2 - lat1);
+  double dlambda = deg2rad(lon2 - lon1);
+
+  double a = sin(dphi / 2.0) * sin(dphi / 2.0) +
+             cos(phi1) * cos(phi2) *
+             sin(dlambda / 2.0) * sin(dlambda / 2.0);
+
+  double c = 2.0 * atan2(sqrt(a), sqrt(1.0 - a));
+  return R * c;
+}
+
+double bearingDegrees(double lat1, double lon1, double lat2, double lon2) {
+  double phi1 = deg2rad(lat1);
+  double phi2 = deg2rad(lat2);
+  double dlambda = deg2rad(lon2 - lon1);
+
+  double y = sin(dlambda) * cos(phi2);
+  double x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(dlambda);
+
+  double theta = atan2(y, x);
+  double brng = rad2deg(theta);
+
+  // normalize to [0, 360)
+  brng = fmod((brng + 360.0), 360.0);
+  return brng;
+}
+
+// Content from NavigationMath.h
+#pragma once
+#include <Arduino.h>
+
+// Great-circle distance (Haversine), returns meters
+double distanceMeters(double lat1, double lon1, double lat2, double lon2);
+
+// Initial bearing from point 1 to point 2, returns degrees in [0, 360)
+double bearingDegrees(double lat1, double lon1, double lat2, double lon2);
+
 // Content from SendOwnInfo.cpp
 #include "SendOwnInfo.h"
 
@@ -376,9 +425,34 @@ bool UbloxHelper_configureUbxOnlyNavPvt() {
   return (r == ACK_OK);
 }
 
+bool UbloxHelper_parseGpsPayload(const String& str, GpsInfo& in) {
+  char buf[128];
+  str.toCharArray(buf, sizeof(buf));
+
+  char validStr[6] = {0}; // "true" or "false" (+ null)
+
+  int n = sscanf(
+    buf,
+    "LAT=%lf LON=%lf valid=%5s fixType=%hhu",
+    &in.lat,
+    &in.lon,
+    validStr,
+    &in.fixType
+  );
+
+  if (n != 4) {
+    return false;
+  }
+
+  in.hasData = true;
+  in.valid = (strcmp(validStr, "true") == 0);
+  return true;
+}
+
 // Content from U-blox-helper.h
 #pragma once
 #include <Arduino.h>
+#include "SendOwnInfo.h"   // for GpsInfo
 
 // Result of UBX ACK waiting
 enum AckResult { ACK_OK, ACK_NAK, ACK_TIMEOUT };
@@ -393,14 +467,18 @@ void UbloxHelper_flushGpsInput(uint32_t ms);
 // Returns true if NAV-PVT enable got ACK_OK (best-effort; NMEA disables are also attempted).
 bool UbloxHelper_configureUbxOnlyNavPvt();
 
+// Parse received LoRa payload into the unified struct (GpsInfo)
+bool UbloxHelper_parseGpsPayload(const String& str, GpsInfo& in);
+
 // Content from main.cpp
 #include <Arduino.h>
 #include <SPI.h>
 #include <RadioLib.h>
-#include "config.h"          // ✅ use shared configuration values
+#include "config.h"
 #include "SendOwnInfo.h"
 #include "AXP2101.h"
 #include "U-blox-helper.h"
+#include "NavigationMath.h"
 #include <math.h>
 
 double d = 0.0;
@@ -431,67 +509,10 @@ bool transmitFlag = false;
 // flag to indicate that a packet was sent or received
 volatile bool operationDone = false;
 
-#define INITIATING_NODE
+//#define INITIATING_NODE
 
 void setFlag(void) {
   operationDone = true;
-}
-
-static inline double deg2rad(double deg) { return deg * (M_PI / 180.0); }
-static inline double rad2deg(double rad) { return rad * (180.0 / M_PI); }
-
-// Parse received payload into the unified struct
-bool parseGpsPayload(const String& str, GpsInfo& in) {
-  char buf[128];
-  str.toCharArray(buf, sizeof(buf));
-
-  char validStr[6] = {0}; // "true" or "false" (+ null)
-
-  int n = sscanf(
-    buf,
-    "LAT=%lf LON=%lf valid=%5s fixType=%hhu",
-    &in.lat,
-    &in.lon,
-    validStr,
-    &in.fixType
-  );
-
-  if (n != 4) {
-    return false;
-  }
-
-  in.hasData = true;
-  in.valid = (strcmp(validStr, "true") == 0);
-  return true;
-}
-
-double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
-  const double R = 6371000.0;
-  double phi1 = deg2rad(lat1);
-  double phi2 = deg2rad(lat2);
-  double dphi = deg2rad(lat2 - lat1);
-  double dlambda = deg2rad(lon2 - lon1);
-
-  double a = sin(dphi/2.0) * sin(dphi/2.0) +
-             cos(phi1) * cos(phi2) *
-             sin(dlambda/2.0) * sin(dlambda/2.0);
-
-  double c = 2.0 * atan2(sqrt(a), sqrt(1.0 - a));
-  return R * c;
-}
-
-double bearingDegrees(double lat1, double lon1, double lat2, double lon2) {
-  double phi1 = deg2rad(lat1);
-  double phi2 = deg2rad(lat2);
-  double dlambda = deg2rad(lon2 - lon1);
-
-  double y = sin(dlambda) * cos(phi2);
-  double x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(dlambda);
-
-  double theta = atan2(y, x);
-  double brng = rad2deg(theta);
-  brng = fmod((brng + 360.0), 360.0);
-  return brng;
 }
 
 void setup() {
@@ -500,7 +521,7 @@ void setup() {
   // Power GPS via AXP2101
   AXP2101_beginAndEnableGPSPower();
 
-  // GPS UART (✅ uses config.h: GPS_BAUD, GPS_RX_PIN, GPS_TX_PIN)
+  // GPS UART
   GPSSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   delay(200);
 
@@ -516,7 +537,6 @@ void setup() {
   Serial.println("SX126x Sender starting...");
   SPI.begin(5, 19, 27, 18);
 
-  // ✅ uses config.h: LORA_FREQ
   int state = radio.begin(LORA_FREQ);
   if (state != RADIOLIB_ERR_NONE) {
     Serial.print("radio.begin() failed, code = ");
@@ -553,9 +573,7 @@ void loop() {
 
     if (transmitFlag) {
       // previous operation was transmission
-      if (transmissionState == RADIOLIB_ERR_NONE) {
-        //Serial.println(F("transmission finished!"));
-      } else {
+      if (transmissionState != RADIOLIB_ERR_NONE) {
         Serial.print(F("failed, code "));
         Serial.println(transmissionState);
       }
@@ -570,7 +588,7 @@ void loop() {
       int state = radio.readData(str);
 
       if (state == RADIOLIB_ERR_NONE) {
-        if (parseGpsPayload(str, companion)) {
+        if (UbloxHelper_parseGpsPayload(str, companion)) {
           haveCompanionFix = true;
         } else {
           Serial.println("❌ Failed to parse companion payload");
@@ -585,6 +603,7 @@ void loop() {
       if (haveCompanionFix && companion.hasData) {
         d = distanceMeters(own.lat, own.lon, companion.lat, companion.lon);
         b = bearingDegrees(own.lat, own.lon, companion.lat, companion.lon);
+
         Serial.print(d, 6);
         Serial.print(", ");
         Serial.print(b, 6);
@@ -595,7 +614,7 @@ void loop() {
         Serial.print(", ");
         Serial.print(own.valid ? "true" : "false");
         Serial.print(", ");
-        Serial.println(companion.valid ? "true" : "false");        
+        Serial.println(companion.valid ? "true" : "false");
       } else {
         Serial.println("Companion: (no data yet)");
       }

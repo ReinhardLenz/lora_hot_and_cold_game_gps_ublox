@@ -119,3 +119,27 @@ bool UbloxHelper_configureUbxOnlyNavPvt() {
 
   return (r == ACK_OK);
 }
+
+bool UbloxHelper_parseGpsPayload(const String& str, GpsInfo& in) {
+  char buf[128];
+  str.toCharArray(buf, sizeof(buf));
+
+  char validStr[6] = {0}; // "true" or "false" (+ null)
+
+  int n = sscanf(
+    buf,
+    "LAT=%lf LON=%lf valid=%5s fixType=%hhu",
+    &in.lat,
+    &in.lon,
+    validStr,
+    &in.fixType
+  );
+
+  if (n != 4) {
+    return false;
+  }
+
+  in.hasData = true;
+  in.valid = (strcmp(validStr, "true") == 0);
+  return true;
+}

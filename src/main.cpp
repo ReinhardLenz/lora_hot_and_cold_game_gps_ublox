@@ -1,11 +1,11 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <RadioLib.h>
-#include "config.h"          // 
+#include "config.h"
 #include "SendOwnInfo.h"
 #include "AXP2101.h"
 #include "U-blox-helper.h"
-#include "NavigationMath.h"  // 
+#include "NavigationMath.h"
 #include <math.h>
 
 double d = 0.0;
@@ -42,38 +42,13 @@ void setFlag(void) {
   operationDone = true;
 }
 
-// Parse received payload into the unified struct
-bool parseGpsPayload(const String& str, GpsInfo& in) {
-  char buf[128];
-  str.toCharArray(buf, sizeof(buf));
-
-  char validStr[6] = {0}; // "true" or "false" (+ null)
-
-  int n = sscanf(
-    buf,
-    "LAT=%lf LON=%lf valid=%5s fixType=%hhu",
-    &in.lat,
-    &in.lon,
-    validStr,
-    &in.fixType
-  );
-
-  if (n != 4) {
-    return false;
-  }
-
-  in.hasData = true;
-  in.valid = (strcmp(validStr, "true") == 0);
-  return true;
-}
-
 void setup() {
   Serial.begin(115200);
 
   // Power GPS via AXP2101
   AXP2101_beginAndEnableGPSPower();
 
-  // GPS UART (✅ uses config.h: GPS_BAUD, GPS_RX_PIN, GPS_TX_PIN)
+  // GPS UART
   GPSSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   delay(200);
 
@@ -89,7 +64,6 @@ void setup() {
   Serial.println("SX126x Sender starting...");
   SPI.begin(5, 19, 27, 18);
 
-  // ✅ uses config.h: LORA_FREQ
   int state = radio.begin(LORA_FREQ);
   if (state != RADIOLIB_ERR_NONE) {
     Serial.print("radio.begin() failed, code = ");
@@ -126,9 +100,7 @@ void loop() {
 
     if (transmitFlag) {
       // previous operation was transmission
-      if (transmissionState == RADIOLIB_ERR_NONE) {
-        //Serial.println(F("transmission finished!"));
-      } else {
+      if (transmissionState != RADIOLIB_ERR_NONE) {
         Serial.print(F("failed, code "));
         Serial.println(transmissionState);
       }
@@ -143,7 +115,7 @@ void loop() {
       int state = radio.readData(str);
 
       if (state == RADIOLIB_ERR_NONE) {
-        if (parseGpsPayload(str, companion)) {
+        if (UbloxHelper_parseGpsPayload(str, companion)) {
           haveCompanionFix = true;
         } else {
           Serial.println("❌ Failed to parse companion payload");
