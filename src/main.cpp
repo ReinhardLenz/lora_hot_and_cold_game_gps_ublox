@@ -35,7 +35,7 @@ bool transmitFlag = false;
 // flag to indicate that a packet was sent or received
 volatile bool operationDone = false;
 
-//#define INITIATING_NODE
+#define INITIATING_NODE
 
 void setFlag(void) {
   operationDone = true;
@@ -158,7 +158,7 @@ void loop() {
     if (transmitFlag) {
       // previous operation was transmission
       if (transmissionState == RADIOLIB_ERR_NONE) {
-        Serial.println(F("transmission finished!"));
+        //Serial.println(F("transmission finished!"));
       } else {
         Serial.print(F("failed, code "));
         Serial.println(transmissionState);
@@ -191,7 +191,15 @@ void loop() {
         b = bearingDegrees(own.lat, own.lon, companion.lat, companion.lon);
         Serial.print(d, 6);
         Serial.print(", ");
-        Serial.println(b, 6);
+        Serial.print(b, 6);
+        Serial.print(", ");
+        Serial.print(own.fixType);
+        Serial.print(", ");
+        Serial.print(companion.fixType);
+        Serial.print(", ");
+        Serial.print(own.valid ? "true" : "false");
+        Serial.print(", ");
+        Serial.println(companion.valid ? "true" : "false");        
       } else {
         Serial.println("Companion: (no data yet)");
       }

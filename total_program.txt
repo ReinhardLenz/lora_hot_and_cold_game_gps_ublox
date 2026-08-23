@@ -397,6 +397,7 @@ bool UbloxHelper_configureUbxOnlyNavPvt();
 #include <Arduino.h>
 #include <SPI.h>
 #include <RadioLib.h>
+#include "config.h"          // ✅ use shared configuration values
 #include "SendOwnInfo.h"
 #include "AXP2101.h"
 #include "U-blox-helper.h"
@@ -404,31 +405,24 @@ bool UbloxHelper_configureUbxOnlyNavPvt();
 
 double d = 0.0;
 double b = 0.0;
+
 GpsInfo companion;                 // last parsed companion data (persists)
 bool   haveCompanionFix = false;   // indicates we have valid parsed data at least once
+
 // GPS UART
 HardwareSerial GPSSerial(1);
-static const int GPS_RX_PIN = 34;   // GPS TX -> MCU RX
-static const int GPS_TX_PIN = 12;   // GPS RX -> MCU TX
 
 // --------------------
-// ⚠️  LORA
+// LoRa (SX1262)
 // --------------------
-static const int LORA_NSS  = 18;
-static const int LORA_DIO1 = 33;
-static const int LORA_RST  = 23;
-static const int LORA_BUSY = 32;
-
 SX1262 radio = SX1262(
-    new Module(
-        LORA_NSS,
-        LORA_DIO1,
-        LORA_RST,
-        LORA_BUSY
-    )
+  new Module(
+    LORA_NSS,
+    LORA_DIO1,
+    LORA_RST,
+    LORA_BUSY
+  )
 );
-
-static const float LORA_FREQ = 868.0;
 
 int transmissionState = RADIOLIB_ERR_NONE;
 
@@ -500,15 +494,14 @@ double bearingDegrees(double lat1, double lon1, double lat2, double lon2) {
   return brng;
 }
 
-
 void setup() {
   Serial.begin(115200);
 
   // Power GPS via AXP2101
   AXP2101_beginAndEnableGPSPower();
 
-  // GPS UART
-  GPSSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  // GPS UART (✅ uses config.h: GPS_BAUD, GPS_RX_PIN, GPS_TX_PIN)
+  GPSSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   delay(200);
 
   // Provide GPS serial to u-blox helper module and configure receiver output
@@ -523,6 +516,7 @@ void setup() {
   Serial.println("SX126x Sender starting...");
   SPI.begin(5, 19, 27, 18);
 
+  // ✅ uses config.h: LORA_FREQ
   int state = radio.begin(LORA_FREQ);
   if (state != RADIOLIB_ERR_NONE) {
     Serial.print("radio.begin() failed, code = ");
@@ -560,7 +554,7 @@ void loop() {
     if (transmitFlag) {
       // previous operation was transmission
       if (transmissionState == RADIOLIB_ERR_NONE) {
-        Serial.println(F("transmission finished!"));
+        //Serial.println(F("transmission finished!"));
       } else {
         Serial.print(F("failed, code "));
         Serial.println(transmissionState);
@@ -588,13 +582,20 @@ void loop() {
       // send own info
       GpsInfo own = prepareAndSendOwnInfo(radio, transmissionState, transmitFlag);
 
-
       if (haveCompanionFix && companion.hasData) {
-      d = distanceMeters(own.lat, own.lon, companion.lat, companion.lon);
-      b = bearingDegrees(own.lat, own.lon, companion.lat, companion.lon);
-      Serial.print(d, 6);
-      Serial.print(", ");
-      Serial.println(b, 6);
+        d = distanceMeters(own.lat, own.lon, companion.lat, companion.lon);
+        b = bearingDegrees(own.lat, own.lon, companion.lat, companion.lon);
+        Serial.print(d, 6);
+        Serial.print(", ");
+        Serial.print(b, 6);
+        Serial.print(", ");
+        Serial.print(own.fixType);
+        Serial.print(", ");
+        Serial.print(companion.fixType);
+        Serial.print(", ");
+        Serial.print(own.valid ? "true" : "false");
+        Serial.print(", ");
+        Serial.println(companion.valid ? "true" : "false");        
       } else {
         Serial.println("Companion: (no data yet)");
       }
