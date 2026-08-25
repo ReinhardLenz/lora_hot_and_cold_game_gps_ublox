@@ -223,18 +223,20 @@ Build (#define INITIATING_NODE is not commented out)
 ```bash
 # Using PlatformIO CLI
 pio run -e receiver --target upload
+```
 
 # Or in VS Code:
 # Click the "PlatformIO" icon → "Project Tasks" → "receiver" → "Upload"
-```
 
 ### Monitor Serial Output
 
 ```bash
 # Monitor sender (GPS coordinates)
 pio device monitor -e sender
+```
 
 # Monitor receiver (received messages)
+```bash
 pio device monitor -e receiver
 ```
 
@@ -242,6 +244,7 @@ pio device monitor -e receiver
 ```bash
 pio device monitor --port COM3   # Windows
 pio device monitor --port /dev/ttyUSB0  # Linux/Mac
+```
 
 ## Prerequisites
 - Install VS Code
