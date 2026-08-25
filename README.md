@@ -96,6 +96,10 @@ In this branch GPS_bearing, the distance and bearing betwene "self" T-BEAM and "
 
    - Powers the GPS module via the AXP2101 PMIC (power management IC) The program attempts to communicate with the AXP2101 chip (which manages the voltages). If it finds a signal, it activates the output that powers the GPS (3.3V). Otherwise, it displays a warning.
 
+![Diagram](images/T-beam_data_bus_overview.jpg)
+
+
+
    - Configures the u-blox GPS to output only UBX binary protocol (disables NMEA sentences) Enables NAV-PVT (Position, Velocity, Time) messages at 1Hz rate on UART1
    - Initializing the GPS serial port:
     This opens a 9600 baud UART connection between the ESP32 and the GPS (pins 34 for receiving, 12 for transmitting).
