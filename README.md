@@ -1,9 +1,68 @@
-# T-Beam LoRa “Hello” Link (Sender + Receiver) — RadioLib (SX1262, 868 MHz)
+
+# Buddy finder compass LoRa Link (Sender + Receiver)
+
+(Note: at the moment the program compiles, but practical test is not yet done)
+
+## The main idea:
+It’s like a “hot-and-cold” game, but instead of saying “warmer,” it simply points you in the right direction with a light.
+ 
+Imagine two friends each carrying a small “helper gadget” when they go hiking, exploring, or looking for something. 
+
+It is "off grid", not depending on access to phone or internet  
+
+
+![Diagram](images/schematic_path_view.jpg)
+
+
+## What the gadget does:
+- ✅ It knows which way you are facing
+Like a compass, it can tell whether you’re pointing toward north, south, east, or west. 
+
+ 
+- ✅ It knows where your buddy is (roughly)
+Your friend’s gadget and your gadget can “talk” to each other from far away, even if you can’t see each other.
+
+ 
+- ✅ It tells you which direction to walk to reach them
+Your gadget compares:
+
+ 
+- ✅ where you are,
+where your buddy is,
+and which way you’re facing,
+Then it figures out: “Your buddy is that way.”
+
+ 
+- ✅ It shows the direction in a super simple way
+Instead of showing a map or numbers, it uses a circle of lights:
+
+ 
+- ✅ If the buddy is in front of you, the LED at the “front” glows.
+If they’re to your left, the LED on the left glows.
+If they’re behind you, a LED at the back glows.
+So you just turn until the “go that way” LED is in front, then walk forward
+ 
+## How you’d use it in real life:
+
+### Situation A: Two people in the woods/mountains/desert
+Both people carry one gadget.
+If you get separated, look at your LED compass ring ring.
+Turn your body until the “correct” LED is at the front.
+Walk that way.
+Check again sometimes (because your buddy may also be moving).
+### Situation B: Finding your dog
+Put one gadget on the dog’s collar, and carry the other yourself.
+If the dog runs off, look at your lights.
+Turn until the “correct” light is in front.
+Walk that way, checking again as you go.
+
+## Technical explanation
 
 A minimal two-device project using **two LILYGO T-Beam V1.2 (ESP32 + SX1262)** boards to communicate over **LoRa** in the **EU 868 MHz** band.
 
 The program is  a "ping - pong" program between two ESP32 (T-BEAM) with LORA communication. Both T-BEAM transmit regularly their GPS position to each other. 
 
+Each LILYGO T-Beam LORA32 868MHz module is connected  with a BNO085 sensor through a UART bus. The LILYGO T-Beam serves as the main microcontroller and communication module, while the BNO085 sensor measures the spatial orientation of the device, i.e., where the device itself is pointing in relation to the North Pole.  Because the device knows its own orientation and also the location of the second "buddy" device, it now can calculate the direction in which the other buddy device is located. This direction is then displayed using a so-called WS2812B LED Pixel Individually Addressable Ring.
 
 ---
 
@@ -218,24 +277,24 @@ invitee project
 Build (#define INITIATING_NODE is not commented out)
 
 
-### Build & Upload to Receiver T-Beam
+#### Build & Upload to Receiver T-Beam
 
 ```bash
 # Using PlatformIO CLI
 pio run -e receiver --target upload
 ```
 
-# Or in VS Code:
-# Click the "PlatformIO" icon → "Project Tasks" → "receiver" → "Upload"
+#### Or in VS Code:
+Click the "PlatformIO" icon → "Project Tasks" → "receiver" → "Upload"
 
-### Monitor Serial Output
+#### Monitor Serial Output
 
 ```bash
 # Monitor sender (GPS coordinates)
 pio device monitor -e sender
 ```
 
-# Monitor receiver (received messages)
+#### Monitor receiver (received messages)
 ```bash
 pio device monitor -e receiver
 ```
