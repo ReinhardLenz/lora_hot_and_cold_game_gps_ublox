@@ -1,9 +1,9 @@
 
 # Buddy finder compass LoRa Link (Sender + Receiver)
 
-(Note: at the moment the program compiles, but practical test is not yet done)
-
+<!--
 ## The main idea:
+
 It’s like a “hot-and-cold” game, but instead of saying “warmer,” it simply points you in the right direction with a light.
  
 Imagine two friends each carrying a small “helper gadget” when they go hiking, exploring, or looking for something. 
@@ -42,6 +42,7 @@ If they’re to your left, the LED on the left glows.
 If they’re behind you, a LED at the back glows.
 So you just turn until the “go that way” LED is in front, then walk forward
  
+ -->
 ## How you’d use it in real life:
 
 ### Situation A: Two people in the woods/mountains/desert
