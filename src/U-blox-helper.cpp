@@ -243,7 +243,7 @@ static void sendUBX_CFG_GNSS_GPS_GAL_GLO()
 
   // gnssId values for M8:
   // 0=GPS, 1=SBAS, 2=Galileo, 3=BeiDou, 4=IMES, 5=QZSS, 6=GLONASS
-
+/*
   putBlock(0, 0, 8, 16, true);  // GPS enabled
   putBlock(1, 1, 1,  3, true);  // SBAS enabled (optional)
   putBlock(2, 2, 4,  8, true);  // Galileo enabled
@@ -251,6 +251,15 @@ static void sendUBX_CFG_GNSS_GPS_GAL_GLO()
   putBlock(4, 4, 0,  0, false); // IMES disabled
   putBlock(5, 5, 0,  3, true);  // QZSS enabled (optional)
   putBlock(6, 6, 4,  8, true);  // GLONASS enabled
+*/
+  putBlock(0, 0, 8, 32, true);  // GPS enabled
+  putBlock(1, 1, 1,  3, true);  // SBAS enabled (optional)
+  putBlock(2, 2, 8,  8, true);  // Galileo enabled
+  putBlock(3, 3, 8,  32, true); // BeiDou disabled
+  putBlock(4, 4, 0,  0, false); // IMES disabled
+  putBlock(5, 5, 0,  3, true);  // QZSS enabled (optional)
+  putBlock(6, 6, 8,  32, true);  // GLONASS enabled
+
 
   sendUBX(0x06, 0x3E, payload, sizeof(payload));
 }
