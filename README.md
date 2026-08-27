@@ -197,35 +197,12 @@ For the distance calculation, the Haversine is used [Wikipedia about Haversine](
 to find the bearing (direction angle) from one GPS point to another, the function treats Earth like a sphere and uses trigonometry. First, it converts both locations’ latitude and longitude from degrees to radians (because math functions expect radians). Then it looks at the difference in longitude between the two points and computes two values that represent how far “east/west” and “north/south” the second point is relative to the first on the globe. Using atan2(y, x), it turns those into an angle. Finally, it converts the angle back to degrees and normalizes it to 0–360°, where 0° is north, 90° east.
 
 ##### Terminal list during operation:
-
-Listening for GPS...
-SX126x Sender starting...
-✅ Radio init OK
-[SX1262] Starting to listen ... success!
-Received raw: start transmitting
-⚠️ Received message is not a valid 'lat,lon' pair (ignored).
-Sending: 60.624949,24.828283
-
-....
-
-transmission finished!
-Received raw: 60.624436,24.828638
-
-✅ Parsed companion GPS -> Latitude = 60.624436 Longitude = 24.828638
-📏 Distance to companion: 53.9 m
-🧭 Bearing to companion: 160.7 deg (0=N, 90=E)
-Sending: 60.624871,24.828298
+dist       angle     fix1,fix1, valid1, valid2 
+17.166008, 143.877527, 3, 3, true, true
+15.602145, 148.784867, 3, 3, true, true
+15.526346, 141.979034, 3, 3, true, true
+17.158990, 129.280774, 3, 3, true, true
 ...
-
-transmission finished!
-Received raw: 60.624539,24.828793
-
-✅ Parsed companion GPS -> Latitude = 60.624539 Longitude = 24.828793
-📏 Distance to companion: 34.5 m
-🧭 Bearing to companion: 143.9 deg (0=N, 90=E)
-Sending: 60.624836,24.828445
-
-
 
 ## Features
 
