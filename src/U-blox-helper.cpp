@@ -6,7 +6,7 @@ static HardwareSerial* s_gps = nullptr;
 // ------------------------------------------------------------
 // UBX helpers (private to this translation unit)
 // ------------------------------------------------------------
-static void sendUBX(const uint8_t* msg, uint16_t len) {
+static void sendUBXraw(const uint8_t* msg, uint16_t len) {
   if (!s_gps) return;
   s_gps->write(msg, len);
   s_gps->flush();
@@ -78,7 +78,7 @@ static void sendUBX_CFG_MSG(uint8_t targetMsgClass, uint8_t targetMsgId, uint8_t
   ubxChecksum(&msg[2], 12, ckA, ckB); // class..payload
   msg[14] = ckA; msg[15] = ckB;
 
-  sendUBX(msg, sizeof(msg));
+  sendUBXraw(msg, sizeof(msg));
 }
 
 // ------------------------------------------------------------
@@ -128,15 +128,15 @@ bool UbloxHelper_parseGpsPayload(const String& str, GpsInfo& in) {
 
 
 // --- UBX framing helpers you likely already have ---
-// sendUBX(uint8_t cls, uint8_t id, const uint8_t* payload, uint16_t len);
+// sendUBXpacket(uint8_t cls, uint8_t id, const uint8_t* payload, uint16_t len);
 // waitForAck(uint8_t cls, uint8_t id, uint32_t timeoutMs);
 // UbloxHelper_flushGpsInput(uint32_t ms);
 // sendUBX_CFG_MSG(uint8_t msgClass, uint8_t msgId, uint8_t rate);
 
-// If you don't have a generic sendUBX(), you must adapt sendUBX_CFG_GNSS_*()
+// If you don't have a generic sendUBXpacket(), you must adapt sendUBX_CFG_GNSS_*()
 // to your existing UBX send routine.
 
-static void sendUBX(uint8_t cls, uint8_t id, const uint8_t* payload, uint16_t len)
+static void sendUBXpacket(uint8_t cls, uint8_t id, const uint8_t* payload, uint16_t len)
 {
   // Minimal UBX packet writer: 0xB5 0x62 CLS ID LEN_L LEN_H PAYLOAD CK_A CK_B
   uint8_t ckA = 0, ckB = 0;
@@ -185,7 +185,7 @@ static void sendUBX_CFG_CFG_save()
   // deviceMask: BBR + Flash
   payload[12] = 0x03;
 
-  sendUBX(0x06, 0x09, payload, sizeof(payload));
+  sendUBXpacket(0x06, 0x09, payload, sizeof(payload));
 }
 
 // UBX-CFG-GNSS (0x06 0x3E) for u-blox M8
@@ -261,7 +261,7 @@ static void sendUBX_CFG_GNSS_GPS_GAL_GLO()
   putBlock(6, 6, 8,  32, true);  // GLONASS enabled
 
 
-  sendUBX(0x06, 0x3E, payload, sizeof(payload));
+  sendUBXpacket(0x06, 0x3E, payload, sizeof(payload));
 }
 
 bool UbloxHelper_configureUbxOnlyNavPvt()
