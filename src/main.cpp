@@ -11,8 +11,8 @@
 double d = 0.0;
 double b = 0.0;
 
-GpsInfo companion;                 // last parsed companion data (persists)
-bool   haveCompanionFix = false;   // indicates we have valid parsed data at least once
+GpsInfo companion;
+bool   haveCompanionFix = false;
 
 // GPS UART
 HardwareSerial GPSSerial(1);
@@ -30,16 +30,49 @@ SX1262 radio = SX1262(
 );
 
 int transmissionState = RADIOLIB_ERR_NONE;
-
-// flag to indicate transmission or reception state
 bool transmitFlag = false;
-// flag to indicate that a packet was sent or received
 volatile bool operationDone = false;
 
-#define INITIATING_NODE
+//#define INITIATING_NODE
+
+// --------------------
+// ✅ Recovery tuning
+// --------------------
+static constexpr uint32_t RADIO_STALL_TIMEOUT_MS = 4000;   // if no IRQ for this long -> recover
+static constexpr uint8_t  RADIO_MAX_STALLS_BEFORE_REINIT = 3;
+
+static uint32_t lastIrqMs = 0;
+static uint8_t  stallCount = 0;
 
 void setFlag(void) {
   operationDone = true;
+  lastIrqMs = millis();
+}
+
+static void radioRecoverStartReceive() {
+  // best-effort: stop any ongoing op and restart RX
+  radio.standby();
+  delay(5);
+  radio.startReceive();
+  transmitFlag = false;
+}
+
+static void radioHardReinit() {
+  Serial.println("⚠️ Radio hard re-init...");
+  radio.standby();
+  delay(10);
+
+  int state = radio.begin(LORA_FREQ);
+  if (state != RADIOLIB_ERR_NONE) {
+    Serial.print("❌ radio.begin() failed, code = ");
+    Serial.println(state);
+    return;
+  }
+
+  Serial.println("✅ Radio re-init OK");
+  radio.setDio1Action(setFlag);
+  radio.startReceive();
+  transmitFlag = false;
 }
 
 void setup() {
@@ -52,7 +85,6 @@ void setup() {
   GPSSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   delay(200);
 
-  // Provide GPS serial to u-blox helper module and configure receiver output
   UbloxHelper_begin(GPSSerial);
 
   bool ok = UbloxHelper_configureUbxOnlyNavPvt();
@@ -61,7 +93,7 @@ void setup() {
   }
 
   // LoRa init
-  Serial.println("SX126x Sender starting...");
+  Serial.println("SX126x PingPong starting...");
   SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, SPI_SS_PIN);
 
   int state = radio.begin(LORA_FREQ);
@@ -72,10 +104,20 @@ void setup() {
   }
   Serial.println("✅ Radio init OK");
 
-  // Tell SendOwnInfo which serial to parse UBX from
+// ✅ LoRa link settings (MUST match on both devices)
+radio.setSpreadingFactor(10);     // or 11 (more range, slower)
+radio.setBandwidth(125.0);        // kHz
+radio.setCodingRate(7);           // 4/7
+radio.setOutputPower(14);         // dBm (⚠️ check legal limits)
+
+Serial.println("✅ Radio init OK");
+
+
   SendOwnInfo_begin(GPSSerial);
 
   radio.setDio1Action(setFlag);
+
+  lastIrqMs = millis();
 
 #if defined(INITIATING_NODE)
   Serial.print(F("[SX1262] Sending first packet ... "));
@@ -95,56 +137,89 @@ void setup() {
 }
 
 void loop() {
-  if (operationDone) {
-    operationDone = false;
+  // ✅ Always keep parsing GPS in the background (important!)
+  // This prevents GPS UART buffers from overflowing and keeps your own fix fresh.
+  // (Your SendOwnInfo parser reads from GPSSerial when you transmit, but doing it
+  // continuously is safer.)
+  // If you want, you can expose a SendOwnInfo_poll() later; for now we keep it simple.
 
-    if (transmitFlag) {
-      // previous operation was transmission
-      if (transmissionState != RADIOLIB_ERR_NONE) {
-        Serial.print(F("failed, code "));
-        Serial.println(transmissionState);
-      }
+  // ✅ RADIO STALL WATCHDOG:
+  // If no IRQ happens for too long, force RX restart / reinit.
+  uint32_t now = millis();
+  if (!operationDone && (now - lastIrqMs) > RADIO_STALL_TIMEOUT_MS) {
+    stallCount++;
+    Serial.print("⚠️ Radio stall detected. Recovering RX. stallCount=");
+    Serial.println(stallCount);
 
-      // listen for response
-      radio.startReceive();
-      transmitFlag = false;
+    radioRecoverStartReceive();
+    lastIrqMs = now;
 
-    } else {
-      // previous operation was reception
-      String str;
-      int state = radio.readData(str);
+    if (stallCount >= RADIO_MAX_STALLS_BEFORE_REINIT) {
+      stallCount = 0;
+      radioHardReinit();
+      lastIrqMs = millis();
+    }
+  }
 
-      if (state == RADIOLIB_ERR_NONE) {
-        if (UbloxHelper_parseGpsPayload(str, companion)) {
-          haveCompanionFix = true;
-        } else {
-          Serial.println("❌ Failed to parse companion payload");
-        }
-      }
+  if (!operationDone) {
+    return; // nothing to do until IRQ or watchdog triggers
+  }
 
-      delay(1000);
+  // we have an IRQ event
+  operationDone = false;
+  stallCount = 0;
 
-      // send own info
-      GpsInfo own = prepareAndSendOwnInfo(radio, transmissionState, transmitFlag);
+  if (transmitFlag) {
+    // previous operation was transmission
+    if (transmissionState != RADIOLIB_ERR_NONE) {
+      Serial.print(F("TX failed, code "));
+      Serial.println(transmissionState);
+    }
 
-      if (haveCompanionFix && companion.hasData) {
-        d = distanceMeters(own.lat, own.lon, companion.lat, companion.lon);
-        b = bearingDegrees(own.lat, own.lon, companion.lat, companion.lon);
+    // listen for response
+    radio.startReceive();
+    transmitFlag = false;
 
-        Serial.print(d, 6);
-        Serial.print(", ");
-        Serial.print(b, 6);
-        Serial.print(", ");
-        Serial.print(own.fixType);
-        Serial.print(", ");
-        Serial.print(companion.fixType);
-        Serial.print(", ");
-        Serial.print(own.valid ? "true" : "false");
-        Serial.print(", ");
-        Serial.println(companion.valid ? "true" : "false");
+  } else {
+    // previous operation was reception
+    String str;
+    int state = radio.readData(str);
+
+    if (state == RADIOLIB_ERR_NONE) {
+      if (UbloxHelper_parseGpsPayload(str, companion)) {
+        haveCompanionFix = true;
       } else {
-        Serial.println("Companion: (no data yet)");
+        Serial.println("❌ Failed to parse companion payload");
       }
+    } else {
+      // If readData fails, restart RX so we don't get stuck
+      Serial.print("⚠️ readData failed, code ");
+      Serial.println(state);
+      radioRecoverStartReceive();
+    }
+
+    delay(1000);
+
+    // send own info
+    GpsInfo own = prepareAndSendOwnInfo(radio, transmissionState, transmitFlag);
+
+    if (haveCompanionFix && companion.hasData) {
+      d = distanceMeters(own.lat, own.lon, companion.lat, companion.lon);
+      b = bearingDegrees(own.lat, own.lon, companion.lat, companion.lon);
+
+      Serial.print(d, 6);
+      Serial.print(", ");
+      Serial.print(b, 6);
+      Serial.print(", ");
+      Serial.print(own.fixType);
+      Serial.print(", ");
+      Serial.print(companion.fixType);
+      Serial.print(", ");
+      Serial.print(own.valid ? "true" : "false");
+      Serial.print(", ");
+      Serial.println(companion.valid ? "true" : "false");
+    } else {
+      Serial.println("Companion: (no data yet)");
     }
   }
 }

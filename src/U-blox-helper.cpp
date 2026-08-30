@@ -271,35 +271,33 @@ bool UbloxHelper_configureUbxOnlyNavPvt()
   UbloxHelper_flushGpsInput(200);
 
   // 1) Disable NMEA sentences on UART1 (best-effort)
-  sendUBX_CFG_MSG(0xF0, 0x00, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50); // GGA
-  sendUBX_CFG_MSG(0xF0, 0x01, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50); // GLL
-  sendUBX_CFG_MSG(0xF0, 0x02, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50); // GSA
-  sendUBX_CFG_MSG(0xF0, 0x03, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50); // GSV
-  sendUBX_CFG_MSG(0xF0, 0x04, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50); // RMC
-  sendUBX_CFG_MSG(0xF0, 0x05, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50); // VTG
+  sendUBX_CFG_MSG(0xF0, 0x00, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50);
+  sendUBX_CFG_MSG(0xF0, 0x01, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50);
+  sendUBX_CFG_MSG(0xF0, 0x02, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50);
+  sendUBX_CFG_MSG(0xF0, 0x03, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50);
+  sendUBX_CFG_MSG(0xF0, 0x04, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50);
+  sendUBX_CFG_MSG(0xF0, 0x05, 0); if (waitForAck(0x06, 0x01, 2000) != ACK_OK) return false; UbloxHelper_flushGpsInput(50);
 
-  // 2) Enable UBX-NAV-PVT (class 0x01 id 0x07) at rate 1 on UART1 , wait 2 SECONDS for ACK
+  // 2) Enable UBX-NAV-PVT (class 0x01 id 0x07) at rate 1 on UART1
   sendUBX_CFG_MSG(0x01, 0x07, 1);
-  if (waitForAck(0x06, 0x01, 2000) != ACK_OK) 
-  Serial.println(F("UBX-CFG-MSG failed! CFG-MSG payload layout/length doesn't match your firmware"));
-    // If you hit this ❌, your CFG-MSG payload layout/length doesn't match your firmware.
-  return false;
-  UbloxHelper_flushGpsInput(100);
-
-  // 3) Configure GNSS constellations: GPS + Galileo + GLONASS, wait 3 SECONDS for ACK
-  sendUBX_CFG_GNSS_GPS_GAL_GLO();
-  if (waitForAck(0x06, 0x3E, 3000) != ACK_OK) {
-    Serial.println(F("UBX-CFG-GNSS failed! CFG-GNSS payload layout/length doesn't match your firmware"));
-    // If you hit this ❌, your CFG-GNSS payload layout/length doesn't match your firmware.
+  if (waitForAck(0x06, 0x01, 2000) != ACK_OK) {
+    Serial.println(F("UBX-CFG-MSG failed! CFG-MSG payload layout/length doesn't match your firmware"));
     return false;
   }
   UbloxHelper_flushGpsInput(100);
 
-  // 4) Save configuration to non-volatile memory (BBR/Flash) , wait 3 SECONDS for ACK
+  // 3) Configure GNSS constellations: GPS + Galileo + GLONASS
+  sendUBX_CFG_GNSS_GPS_GAL_GLO();
+  if (waitForAck(0x06, 0x3E, 3000) != ACK_OK) {
+    Serial.println(F("UBX-CFG-GNSS failed! CFG-GNSS payload layout/length doesn't match your firmware"));
+    return false;
+  }
+  UbloxHelper_flushGpsInput(100);
+
+  // 4) Save configuration to non-volatile memory (BBR/Flash)
   sendUBX_CFG_CFG_save();
   if (waitForAck(0x06, 0x09, 3000) != ACK_OK) {
     Serial.println(F("UBX-CFG-CFG save failed! try deviceMask=0x01 (BBR only)."));
-    // Some boards don't have Flash; if this fails, try deviceMask=0x01 (BBR only).
     return false;
   }
   UbloxHelper_flushGpsInput(100);
