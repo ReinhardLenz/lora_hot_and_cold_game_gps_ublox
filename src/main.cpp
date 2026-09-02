@@ -8,6 +8,9 @@
 #include "NavigationMath.h"
 #include <math.h>
 
+//#define INITIATING_NODE
+
+
 double d = 0.0;
 double b = 0.0;
 
@@ -36,7 +39,6 @@ bool transmitFlag = false;
 // flag to indicate that a packet was sent or received
 volatile bool operationDone = false;
 
-#define INITIATING_NODE
 
 void setFlag(void) {
   operationDone = true;
