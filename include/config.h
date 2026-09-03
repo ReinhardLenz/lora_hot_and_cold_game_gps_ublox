@@ -30,9 +30,9 @@ static constexpr int SPI_MOSI_PIN = 27;
 // You can reuse LORA_NSS as the SPI "SS" default pin:
 static constexpr int SPI_SS_PIN   = LORA_NSS;
 
-#endif
 
-/*// -------------------------------
+
+// -------------------------------
 // UART
 // -------------------------------
 constexpr uint32_t PC_BAUD  = 115200;
@@ -49,6 +49,8 @@ constexpr gpio_num_t PIN_BNO_RX = GPIO_NUM_15;
 // -------------------------------
 constexpr gpio_num_t PIN_BNO_RESET = GPIO_NUM_12;   // <-- adjust to your wiring
 
+constexpr uint32_t RESET_TIME_MS = 10;
+
 // -------------------------------
 // WS2812 LED ring
 // -------------------------------
@@ -61,7 +63,6 @@ constexpr uint8_t    LED_BRIGHTNESS = 50;
 // -------------------------------
 constexpr gpio_num_t PIN_STATUS_LED = GPIO_NUM_4;   // <-- adjust to your board/wiring
 
-constexpr uint32_t RESET_TIME_MS = 10;
 constexpr uint32_t BLINK_DELAY   = 200;
-*/
 
+#endif

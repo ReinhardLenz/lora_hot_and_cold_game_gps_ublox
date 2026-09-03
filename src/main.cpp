@@ -1,4 +1,3 @@
-
 #include <Arduino.h>
 #include <SPI.h>
 #include <RadioLib.h>
@@ -8,69 +7,59 @@
 #include "U-blox-helper.h"
 #include "NavigationMath.h"
 #include <math.h>
-
+#include <Adafruit_BNO08x.h>
+#include <compass.h>
+#include "LED.h"
+#include <FastLED.h>
 
 // ============================================================
 // T-BEAM SX1262 GPS <-> LoRa communication
-//
 // RECEIVE-STATE RACE FIX
-//
-// The radio interrupt and the main loop are asynchronous.
-// The old design used:
-//
-//     volatile bool operationDone
-//     radioOperation
-//
-// as two independent variables.
-//
-// This can race:
-//
-//     ISR                         loop
-//     ---                         ----
-//     DIO1 interrupt
-//                                 change RX -> IDLE
-//                                 change IDLE -> TX
-//     operationDone = true
-//
-// The main loop could then interpret an old RX interrupt as
-// belonging to the TX operation.
-//
-// This version uses:
-//
-//   1. A protected radio state.
-//   2. An IRQ event counter.
-//   3. The operation state captured by the ISR.
-//   4. Critical sections around state/event changes.
-//   5. Explicit RX -> IDLE -> TX and TX -> IDLE -> RX
-//      transitions.
-//   6. No "no IRQ = radio failure" watchdog.
-//
-// A quiet channel is therefore treated as a normal condition.
-//
-// Only this main.cpp needs to be changed.
 // ============================================================
 
+//#define INITIATING_NODE
 
-#define INITIATING_NODE
+// --------------------
+// BNO085 UART
+// --------------------
+Adafruit_BNO08x bno08x(PIN_BNO_RESET);
+Compass compass(bno08x);
 
+
+// LED ring module
+LedRing ledRing(LED_COUNT, static_cast<uint8_t>(PIN_LED_RING));
+
+
+// ============================================================
+// NEW: Potentiometer correction (global, persistent)
+// ============================================================
+static float PotentiometerCorrection = 0.0f;   // set in setup() for now
+
+// Helper: normalize degrees to [0, 360)
+static float normalizeDeg360(float deg) {
+  deg = fmodf(deg, 360.0f);
+  if (deg < 0.0f) deg += 360.0f;
+  return deg;
+}
 
 // ============================================================
 // Navigation
 // ============================================================
 
 double d = 0.0;
-double b = 0.0;
+double b = 0.0;   // bearingDegrees(...) stored here when computed
+
+// NEW: store companion bearing (relative to corrected yaw)
+double CompanionBearing = 0.0;
 
 GpsInfo companion;
 bool haveCompanionFix = false;
-
 
 // ============================================================
 // GPS UART
 // ============================================================
 
 HardwareSerial GPSSerial(1);
-
 
 // ============================================================
 // SX1262
@@ -85,7 +74,6 @@ SX1262 radio = SX1262(
   )
 );
 
-
 // ============================================================
 // Radio state
 // ============================================================
@@ -97,30 +85,10 @@ enum RadioOperation : uint8_t
   RADIO_TX   = 2
 };
 
-
-// This is accessed from both ISR and main loop.
 static volatile RadioOperation radioOperation = RADIO_IDLE;
-
 
 // ============================================================
 // IRQ event handling
-// ============================================================
-//
-// The old code:
-//
-//     volatile bool operationDone
-//
-// can lose an event.
-//
-// We instead count events.
-//
-// irqEventCount is incremented by the ISR.
-//
-// irqEventOperation stores the operation which was active when
-// the interrupt occurred.
-//
-// On ESP32, access is protected with portMUX.
-//
 // ============================================================
 
 static volatile uint32_t irqEventCount = 0;
@@ -129,7 +97,6 @@ static volatile RadioOperation irqEventOperation = RADIO_IDLE;
 static portMUX_TYPE radioStateMux =
     portMUX_INITIALIZER_UNLOCKED;
 
-
 // ============================================================
 // TX state
 // ============================================================
@@ -137,16 +104,15 @@ static portMUX_TYPE radioStateMux =
 int transmissionState = RADIOLIB_ERR_NONE;
 bool transmitFlag = false;
 
-
 // ============================================================
 // Link maintenance
 // ============================================================
 
 static constexpr uint32_t
-  LINK_RECOVERY_INTERVAL_INITIATOR_MS = 5012;
+  LINK_RECOVERY_INTERVAL_INITIATOR_MS = 912;
 
 static constexpr uint32_t
-  LINK_RECOVERY_INTERVAL_OTHER_MS = 6201;
+  LINK_RECOVERY_INTERVAL_OTHER_MS = 1201;
 
 static constexpr uint32_t
   LINK_ACTIVITY_GRACE_MS = 3000;
@@ -154,17 +120,8 @@ static constexpr uint32_t
 static uint32_t lastValidPacketMs = 0;
 static uint32_t nextMaintenanceTxMs = 0;
 
-
 // ============================================================
 // Radio health
-// ============================================================
-//
-// IMPORTANT:
-//
-// Absence of DIO1 is NOT a radio failure.
-//
-// We only declare the SX1262 unhealthy if SPI access itself
-// fails repeatedly.
 // ============================================================
 
 static constexpr uint32_t
@@ -176,21 +133,50 @@ static constexpr uint8_t
 static uint32_t nextHealthCheckMs = 0;
 static uint8_t radioHealthFailures = 0;
 
+enum class ErrorCode
+{
+    None,
+    UART,
+    BNO_NotFound,
+    EnableReport,
+    ProductID,
+};
+
+void fatalError(ErrorCode code)
+{
+    Serial.println();
+    Serial.println("========== FATAL ERROR ==========");
+
+    switch (code)
+    {
+        case ErrorCode::UART:
+            Serial.println("Unable to communicate with BNO085.");
+            break;
+
+        case ErrorCode::BNO_NotFound:
+            Serial.println("BNO085 not detected.");
+            break;
+
+        case ErrorCode::EnableReport:
+            Serial.println("Could not enable report.");
+            break;
+
+        default:
+            Serial.println("Unknown error.");
+            break;
+    }
+
+    while (true)
+    {
+        digitalWrite(PIN_STATUS_LED, HIGH);
+        delay(BLINK_DELAY);
+        digitalWrite(PIN_STATUS_LED, LOW);
+        delay(BLINK_DELAY);
+    }
+}
 
 // ============================================================
 // ISR
-// ============================================================
-//
-// The ISR does only two things:
-//
-//   - capture the operation state
-//   - increment the event counter
-//
-// No Serial.
-// No SPI.
-// No RadioLib calls.
-// No millis().
-//
 // ============================================================
 
 void IRAM_ATTR setFlag(void)
@@ -203,15 +189,8 @@ void IRAM_ATTR setFlag(void)
   portEXIT_CRITICAL_ISR(&radioStateMux);
 }
 
-
 // ============================================================
 // Read pending IRQ event atomically
-// ============================================================
-//
-// Returns true when an event was pending.
-//
-// The event is consumed atomically.
-//
 // ============================================================
 
 static bool takeRadioEvent(RadioOperation &operation)
@@ -234,7 +213,6 @@ static bool takeRadioEvent(RadioOperation &operation)
   return haveEvent;
 }
 
-
 // ============================================================
 // Check whether an IRQ event is pending
 // ============================================================
@@ -252,7 +230,6 @@ static bool radioEventPending()
   return pending;
 }
 
-
 // ============================================================
 // Atomically set radio operation state
 // ============================================================
@@ -265,7 +242,6 @@ static void setRadioOperation(RadioOperation state)
 
   portEXIT_CRITICAL(&radioStateMux);
 }
-
 
 // ============================================================
 // Read radio operation state
@@ -284,14 +260,8 @@ static RadioOperation getRadioOperation()
   return state;
 }
 
-
 // ============================================================
 // Clear pending radio events
-// ============================================================
-//
-// Used only when we have deliberately completed the old radio
-// operation and are about to establish a new one.
-//
 // ============================================================
 
 static void clearRadioEvents()
@@ -303,7 +273,6 @@ static void clearRadioEvents()
   portEXIT_CRITICAL(&radioStateMux);
 }
 
-
 // ============================================================
 // Configure SX1262
 // ============================================================
@@ -312,243 +281,107 @@ static bool configureRadio()
 {
   int state;
 
-
   state = radio.setSpreadingFactor(10);
-
   if (state != RADIOLIB_ERR_NONE) {
-
-    Serial.print(
-      "❌ setSpreadingFactor failed, code = "
-    );
-
+    Serial.print("❌ setSpreadingFactor failed, code = ");
     Serial.println(state);
-
     return false;
   }
-
 
   state = radio.setBandwidth(125.0);
-
   if (state != RADIOLIB_ERR_NONE) {
-
-    Serial.print(
-      "❌ setBandwidth failed, code = "
-    );
-
+    Serial.print("❌ setBandwidth failed, code = ");
     Serial.println(state);
-
     return false;
   }
-
 
   state = radio.setCodingRate(7);
-
   if (state != RADIOLIB_ERR_NONE) {
-
-    Serial.print(
-      "❌ setCodingRate failed, code = "
-    );
-
+    Serial.print("❌ setCodingRate failed, code = ");
     Serial.println(state);
-
     return false;
   }
-
 
   state = radio.setOutputPower(14);
-
   if (state != RADIOLIB_ERR_NONE) {
-
-    Serial.print(
-      "❌ setOutputPower failed, code = "
-    );
-
+    Serial.print("❌ setOutputPower failed, code = ");
     Serial.println(state);
-
     return false;
   }
-
 
   return true;
 }
 
-
 // ============================================================
 // Start RX
-// ============================================================
-//
-// IMPORTANT:
-//
-// radioOperation is changed to RX BEFORE startReceive().
-//
-// Therefore, if DIO1 fires immediately after startReceive(),
-// the ISR records that event as an RX event.
-//
-// The transition is protected against the main-loop side of
-// the race.
-//
 // ============================================================
 
 static int startReceiveSafely()
 {
   int state;
 
-
-  // There must not be an old unprocessed event when we start
-  // a new RX operation.
-  //
-  // The caller is expected to have processed the old operation.
-
   if (radioEventPending()) {
-
-    Serial.println(
-      "⚠️ Cannot start RX: radio IRQ event still pending."
-    );
-
+    Serial.println("⚠️ Cannot start RX: radio IRQ event still pending.");
     return RADIOLIB_ERR_UNKNOWN;
   }
 
-
-  // Put the logical state into RX BEFORE touching the radio.
-
   setRadioOperation(RADIO_RX);
-
   transmitFlag = false;
-
 
   state = radio.startReceive();
 
-
   if (state != RADIOLIB_ERR_NONE) {
-
-    // startReceive failed, therefore RX is not active.
-
     setRadioOperation(RADIO_IDLE);
-
-    Serial.print(
-      "⚠️ radio.startReceive() failed, code = "
-    );
-
+    Serial.print("⚠️ radio.startReceive() failed, code = ");
     Serial.println(state);
-
     return state;
   }
-
 
   return RADIOLIB_ERR_NONE;
 }
 
-
 // ============================================================
 // Prepare transition from RX to TX
-// ============================================================
-//
-// This function first makes absolutely sure that RX is stopped.
-//
-// This is important because startTransmit() must never be
-// launched while the SX1262 is still logically considered RX.
-//
 // ============================================================
 
 static bool prepareForTransmit()
 {
   RadioOperation current = getRadioOperation();
 
-
   if (current == RADIO_TX) {
-
-    Serial.println(
-      "⚠️ TX requested while already transmitting."
-    );
-
+    Serial.println("⚠️ TX requested while already transmitting.");
     return false;
   }
 
-
-  // ----------------------------------------------------------
-  // If currently receiving, finish RX first.
-  // ----------------------------------------------------------
-
   if (current == RADIO_RX) {
-
     int state = radio.finishReceive();
 
     if (state != RADIOLIB_ERR_NONE) {
-
-      Serial.print(
-        "⚠️ finishReceive() returned "
-      );
-
+      Serial.print("⚠️ finishReceive() returned ");
       Serial.println(state);
-
-      // Do not immediately assume total radio failure.
-      //
-      // Put the logical state into IDLE before attempting
-      // recovery.
-
       setRadioOperation(RADIO_IDLE);
-
       return false;
     }
 
     setRadioOperation(RADIO_IDLE);
   }
 
-
-  // ----------------------------------------------------------
-  // There must be no old RX/TX event left over.
-  // ----------------------------------------------------------
-
   clearRadioEvents();
-
-
   return true;
 }
 
-
 // ============================================================
 // Start own GPS transmission
-// ============================================================
-//
-// The important race fix here is:
-//
-//     RX
-//      |
-//      | finishReceive()
-//      v
-//     IDLE
-//      |
-//      | startTransmit()
-//      v
-//     TX
-//
-// The ISR can therefore never report a newly-created TX event
-// as an RX event, or vice versa.
 // ============================================================
 
 static bool startOwnTransmission()
 {
   if (!prepareForTransmit()) {
-
     return false;
   }
 
-
-  // ----------------------------------------------------------
-  // Tell the ISR that the upcoming radio operation is TX
-  // BEFORE startTransmit() is called.
-  // ----------------------------------------------------------
-
   setRadioOperation(RADIO_TX);
-
   transmitFlag = true;
-
-
-  // ----------------------------------------------------------
-  // Parse GPS and start transmission.
-  //
-  // prepareAndSendOwnInfo() calls radio.startTransmit().
-  // ----------------------------------------------------------
 
   GpsInfo own =
       prepareAndSendOwnInfo(
@@ -557,30 +390,16 @@ static bool startOwnTransmission()
         transmitFlag
       );
 
-
   if (transmissionState != RADIOLIB_ERR_NONE) {
-
-    Serial.print(
-      "❌ startTransmit failed, code = "
-    );
-
+    Serial.print("❌ startTransmit failed, code = ");
     Serial.println(transmissionState);
 
-
-    // TX did not actually start.
-
     setRadioOperation(RADIO_IDLE);
-
     transmitFlag = false;
-
     return false;
   }
 
-
-  // ----------------------------------------------------------
-  // Calculate and print navigation information.
-  // ----------------------------------------------------------
-
+  // Calculate navigation only when both sides have data
   if (
     own.hasData &&
     haveCompanionFix &&
@@ -600,35 +419,11 @@ static bool startOwnTransmission()
       companion.lat,
       companion.lon
     );
-
-
-    Serial.print(d, 6);
-    Serial.print(", ");
-
-    Serial.print(b, 6);
-    Serial.print(", ");
-
-    Serial.print(own.fixType);
-    Serial.print(", ");
-
-    Serial.print(companion.fixType);
-    Serial.print(", ");
-
-    Serial.print(
-      own.valid ? "true" : "false"
-    );
-
-    Serial.print(", ");
-
-    Serial.println(
-      companion.valid ? "true" : "false"
-    );
+    // NOTE: b is stored globally and remains valid until next update
   }
-
 
   return true;
 }
-
 
 // ============================================================
 // Schedule next maintenance TX
@@ -637,20 +432,11 @@ static bool startOwnTransmission()
 static void scheduleMaintenanceTransmission()
 {
 #if defined(INITIATING_NODE)
-
-  nextMaintenanceTxMs =
-      millis() +
-      LINK_RECOVERY_INTERVAL_INITIATOR_MS;
-
+  nextMaintenanceTxMs = millis() + LINK_RECOVERY_INTERVAL_INITIATOR_MS;
 #else
-
-  nextMaintenanceTxMs =
-      millis() +
-      LINK_RECOVERY_INTERVAL_OTHER_MS;
-
+  nextMaintenanceTxMs = millis() + LINK_RECOVERY_INTERVAL_OTHER_MS;
 #endif
 }
-
 
 // ============================================================
 // HARD RADIO REINITIALIZATION
@@ -658,128 +444,54 @@ static void scheduleMaintenanceTransmission()
 
 static bool hardRadioReinit()
 {
-  Serial.println(
-    "⚠️ SX1262 hard recovery..."
-  );
-
-
-  // ----------------------------------------------------------
-  // Prevent ISR events from being interpreted during recovery.
-  // ----------------------------------------------------------
+  Serial.println("⚠️ SX1262 hard recovery...");
 
   portENTER_CRITICAL(&radioStateMux);
-
   radioOperation = RADIO_IDLE;
   irqEventCount = 0;
-
   portEXIT_CRITICAL(&radioStateMux);
 
   transmitFlag = false;
 
-
-  // ----------------------------------------------------------
-  // Put chip into reset state.
-  // ----------------------------------------------------------
-
   int state = radio.reset();
-
   if (state != RADIOLIB_ERR_NONE) {
-
-    Serial.print(
-      "⚠️ radio.reset() returned "
-    );
-
+    Serial.print("⚠️ radio.reset() returned ");
     Serial.println(state);
   }
-
 
   delay(50);
 
-
-  // ----------------------------------------------------------
-  // Reinitialize chip.
-  // ----------------------------------------------------------
-
   state = radio.begin(LORA_FREQ);
-
   if (state != RADIOLIB_ERR_NONE) {
-
-    Serial.print(
-      "❌ radio.begin() failed, code = "
-    );
-
+    Serial.print("❌ radio.begin() failed, code = ");
     Serial.println(state);
-
     return false;
   }
-
-
-  // ----------------------------------------------------------
-  // IMPORTANT:
-  // radio.begin() restores the physical chip but our desired
-  // LoRa configuration must be applied again.
-  // ----------------------------------------------------------
 
   if (!configureRadio()) {
-
-    Serial.println(
-      "❌ LoRa configuration after recovery failed."
-    );
-
+    Serial.println("❌ LoRa configuration after recovery failed.");
     return false;
   }
-
-
-  // ----------------------------------------------------------
-  // Reinstall interrupt handler.
-  // ----------------------------------------------------------
 
   radio.setDio1Action(setFlag);
 
-
   delay(10);
-
-
-  // ----------------------------------------------------------
-  // Clear any stale software event before RX starts.
-  // ----------------------------------------------------------
 
   clearRadioEvents();
 
-
-  // ----------------------------------------------------------
-  // Start fresh RX.
-  // ----------------------------------------------------------
-
   state = startReceiveSafely();
-
   if (state != RADIOLIB_ERR_NONE) {
-
-    Serial.print(
-      "❌ RX restart after hard recovery failed, code = "
-    );
-
+    Serial.print("❌ RX restart after hard recovery failed, code = ");
     Serial.println(state);
-
     return false;
   }
 
-
   radioHealthFailures = 0;
+  nextHealthCheckMs = millis() + RADIO_HEALTH_CHECK_INTERVAL_MS;
 
-  nextHealthCheckMs =
-      millis() +
-      RADIO_HEALTH_CHECK_INTERVAL_MS;
-
-
-  Serial.println(
-    "✅ SX1262 hard recovery successful."
-  );
-
-
+  Serial.println("✅ SX1262 hard recovery successful.");
   return true;
 }
-
 
 // ============================================================
 // SETUP
@@ -788,14 +500,39 @@ static bool hardRadioReinit()
 void setup()
 {
   Serial.begin(115200);
+  ledRing.begin(LED_BRIGHTNESS);
+  // NEW: initialize correction (later replace with analogRead)
+  PotentiometerCorrection = 0.0f;
 
+  // --------------------
+  // start BNO085 UART
+  // --------------------
+  Serial2.begin(BNO_BAUD, SERIAL_8N1, PIN_BNO_RX, PIN_BNO_TX);
+
+  while (!Serial) delay(RESET_TIME_MS);
+
+  Serial.println("start Adafruit BNO08x test!");
+
+  if (!bno08x.begin_UART(&Serial2))
+  {
+    fatalError(ErrorCode::BNO_NotFound);
+  }
+
+  Serial.println("BNO08x Found!");
+
+  Compass::setReports(&bno08x, SH2_ROTATION_VECTOR, 100000);
+
+  Serial.println("Reading events");
+  delay(100);
+  // --------------------
+  // end BNO085 UART
+  // --------------------
 
   // ==========================================================
   // GPS POWER
   // ==========================================================
 
   AXP2101_beginAndEnableGPSPower();
-
 
   // ==========================================================
   // GPS UART
@@ -812,28 +549,21 @@ void setup()
 
   UbloxHelper_begin(GPSSerial);
 
-
   bool gpsConfigOK =
       UbloxHelper_configureUbxOnlyNavPvt();
 
-
   if (!gpsConfigOK) {
-
     Serial.println(
       "⚠️ u-blox config: NAV-PVT enable did not ACK "
       "(continuing anyway)."
     );
   }
 
-
   // ==========================================================
   // SPI
   // ==========================================================
 
-  Serial.println(
-    "SX126x PingPong starting..."
-  );
-
+  Serial.println("SX126x PingPong starting...");
 
   SPI.begin(
     SPI_SCK_PIN,
@@ -842,7 +572,6 @@ void setup()
     SPI_SS_PIN
   );
 
-
   // ==========================================================
   // SX1262
   // ==========================================================
@@ -850,48 +579,30 @@ void setup()
   int state =
       radio.begin(LORA_FREQ);
 
-
   if (state != RADIOLIB_ERR_NONE) {
-
-    Serial.print(
-      "radio.begin() failed, code = "
-    );
-
+    Serial.print("radio.begin() failed, code = ");
     Serial.println(state);
-
 
     while (true) {
       delay(1000);
     }
   }
 
-
-  Serial.println(
-    "✅ Radio init OK"
-  );
-
+  Serial.println("✅ Radio init OK");
 
   // ==========================================================
   // LoRa settings
   // ==========================================================
 
   if (!configureRadio()) {
-
-    Serial.println(
-      "❌ LoRa configuration failed."
-    );
-
+    Serial.println("❌ LoRa configuration failed.");
 
     while (true) {
       delay(1000);
     }
   }
 
-
-  Serial.println(
-    "✅ LoRa settings: SF10, BW125, CR4/7, TX14dBm"
-  );
-
+  Serial.println("✅ LoRa settings: SF10, BW125, CR4/7, TX14dBm");
 
   // ==========================================================
   // GPS sender
@@ -899,13 +610,11 @@ void setup()
 
   SendOwnInfo_begin(GPSSerial);
 
-
   // ==========================================================
   // DIO1
   // ==========================================================
 
   radio.setDio1Action(setFlag);
-
 
   // ==========================================================
   // Initial timers
@@ -917,74 +626,39 @@ void setup()
       millis() +
       RADIO_HEALTH_CHECK_INTERVAL_MS;
 
-
   // ==========================================================
   // INITIAL RADIO STATE
   // ==========================================================
 
 #if defined(INITIATING_NODE)
 
-  // ----------------------------------------------------------
-  // Initiator sends first packet.
-  // ----------------------------------------------------------
-
-  Serial.print(
-    F("[SX1262] Sending first packet ... ")
-  );
-
+  Serial.print(F("[SX1262] Sending first packet ... "));
 
   if (!startOwnTransmission()) {
 
-    Serial.println(
-      F("failed")
-    );
-
+    Serial.println(F("failed"));
 
     if (!startReceiveSafely()) {
-
       hardRadioReinit();
     }
 
   } else {
-
-    Serial.println(
-      F("started")
-    );
+    Serial.println(F("started"));
   }
-
 
 #else
 
-  // ----------------------------------------------------------
-  // Other node starts in RX.
-  // ----------------------------------------------------------
+  Serial.print(F("[SX1262] Starting to listen ... "));
 
-  Serial.print(
-    F("[SX1262] Starting to listen ... ")
-  );
-
-
-  state =
-      startReceiveSafely();
-
+  state = startReceiveSafely();
 
   if (state == RADIOLIB_ERR_NONE) {
-
-    Serial.println(
-      F("success!")
-    );
-
+    Serial.println(F("success!"));
   } else {
-
-    Serial.print(
-      F("failed, code ")
-    );
-
+    Serial.print(F("failed, code "));
     Serial.println(state);
 
-
     if (!hardRadioReinit()) {
-
       while (true) {
         delay(1000);
       }
@@ -993,224 +667,96 @@ void setup()
 
 #endif
 
-
   // ==========================================================
   // Maintenance transmission schedule
   // ==========================================================
 
 #if defined(INITIATING_NODE)
-
-  nextMaintenanceTxMs =
-      millis() +
-      LINK_RECOVERY_INTERVAL_INITIATOR_MS;
-
+  nextMaintenanceTxMs = millis() + LINK_RECOVERY_INTERVAL_INITIATOR_MS;
 #else
-
-  nextMaintenanceTxMs =
-      millis() +
-      LINK_RECOVERY_INTERVAL_OTHER_MS;
-
+  nextMaintenanceTxMs = millis() + LINK_RECOVERY_INTERVAL_OTHER_MS;
 #endif
 }
-
 
 // ============================================================
 // HANDLE TX COMPLETE
 // ============================================================
-//
-// Called only when the IRQ event was captured while the radio
-// was in RADIO_TX.
-//
-// ============================================================
 
 static void handleTxEvent()
 {
-  // ----------------------------------------------------------
-  // First change logical state to IDLE.
-  //
-  // This prevents the ISR from associating another event with
-  // TX while finishTransmit() is executing.
-  // ----------------------------------------------------------
-
   setRadioOperation(RADIO_IDLE);
-
 
   int state =
       radio.finishTransmit();
 
-
   transmitFlag = false;
-
 
   if (state != RADIOLIB_ERR_NONE) {
 
-    Serial.print(
-      "⚠️ finishTransmit() failed, code = "
-    );
-
+    Serial.print("⚠️ finishTransmit() failed, code = ");
     Serial.println(state);
-
-
-    // The TX operation failed.
-    //
-    // First attempt normal RX restart.
 
     clearRadioEvents();
 
-
-    if (
-      startReceiveSafely()
-      != RADIOLIB_ERR_NONE
-    ) {
-
-      Serial.println(
-        "⚠️ RX after TX failure failed."
-      );
-
+    if (startReceiveSafely() != RADIOLIB_ERR_NONE) {
+      Serial.println("⚠️ RX after TX failure failed.");
       hardRadioReinit();
     }
-
 
     return;
   }
 
-
-  // ----------------------------------------------------------
-  // TX completed normally.
-  // ----------------------------------------------------------
-
   clearRadioEvents();
 
-
-  state =
-      startReceiveSafely();
-
+  state = startReceiveSafely();
 
   if (state != RADIOLIB_ERR_NONE) {
-
-    Serial.print(
-      "⚠️ RX after TX failed, code = "
-    );
-
+    Serial.print("⚠️ RX after TX failed, code = ");
     Serial.println(state);
-
-
     hardRadioReinit();
   }
 }
-
 
 // ============================================================
 // HANDLE RX COMPLETE
 // ============================================================
-//
-// Called only when the IRQ event was captured while the radio
-// was in RADIO_RX.
-//
-// ============================================================
 
 static void handleRxEvent()
 {
-  // ----------------------------------------------------------
-  // Atomically move logical state away from RX before touching
-  // the radio.
-//
-// This is the other important half of the race fix.
-//
-// Once we begin processing this RX event, a new interrupt cannot
-// be interpreted as another RX operation simply because the old
-// state was still RX.
-// ----------------------------------------------------------
-
   setRadioOperation(RADIO_IDLE);
 
-
-  // ----------------------------------------------------------
-  // Read received packet.
-  // ----------------------------------------------------------
-
   String str;
-
 
   int state =
       radio.readData(str);
 
-
   if (state == RADIOLIB_ERR_NONE) {
 
-    // --------------------------------------------------------
-    // REAL PACKET RECEIVED
-    // --------------------------------------------------------
-
-    lastValidPacketMs =
-        millis();
-
+    lastValidPacketMs = millis();
     radioHealthFailures = 0;
 
-
-    if (
-      UbloxHelper_parseGpsPayload(
-        str,
-        companion
-      )
-    ) {
-
+    if (UbloxHelper_parseGpsPayload(str, companion)) {
       haveCompanionFix = true;
-
-/*
-      Serial.println(
-        "✅ Companion packet received."
-      );*/
-
     } else {
-
-      Serial.println(
-        "❌ Failed to parse companion payload"
-      );
+      Serial.println("❌ Failed to parse companion payload");
     }
 
   } else {
 
-    // --------------------------------------------------------
-    // RX ERROR
-    //
-    // This does NOT mean that the radio has stalled.
-    //
-    // It can simply be a bad packet/CRC/etc.
-    // --------------------------------------------------------
-
-    Serial.print(
-      "⚠️ readData failed, code = "
-    );
-
+    Serial.print("⚠️ readData failed, code = ");
     Serial.println(state);
   }
-
-
-  // ----------------------------------------------------------
-  // Return to RX.
-  // ----------------------------------------------------------
 
   clearRadioEvents();
 
-
-  state =
-      startReceiveSafely();
-
+  state = startReceiveSafely();
 
   if (state != RADIOLIB_ERR_NONE) {
-
-    Serial.print(
-      "⚠️ RX restart failed, code = "
-    );
-
+    Serial.print("⚠️ RX restart failed, code = ");
     Serial.println(state);
-
-
     hardRadioReinit();
   }
 }
-
 
 // ============================================================
 // LOOP
@@ -1218,234 +764,136 @@ static void handleRxEvent()
 
 void loop()
 {
-  uint32_t now =
-      millis();
+  uint32_t now = millis();
 
+  // ----------------------------------------------------------
+  // 0) Compass + per-iteration corrected yaw
+  // ----------------------------------------------------------
+  compass.processSensor();
+
+  // NEW: per-iteration variable (valid only during this loop iteration)
+  float CorrectedYaw =
+      normalizeDeg360(
+        PotentiometerCorrection-compass.getYawNorthDeg() 
+      );
+
+  // NEW: per-iteration companion bearing relative to corrected yaw
+  // b is global and remains stored even if not updated this iteration
+  CompanionBearing =
+      normalizeDeg360(
+        (float)b - CorrectedYaw
+      );
+
+  // Optional debug prints
+  Serial.print("YawNorth=");
+  Serial.print(compass.getYawNorthDeg(), 3);
+  Serial.print(" PotCorr=");
+  Serial.print(PotentiometerCorrection, 3);
+  Serial.print(" CorrectedYaw=");
+  Serial.print(CorrectedYaw, 3);
+  Serial.print(" b=");
+  Serial.print(b, 3);
+  Serial.print(" CompanionBearing=");
+  Serial.println(CompanionBearing, 3);
+
+  ledRing.showDirection(CompanionBearing, CRGB::White);
 
   // ==========================================================
   // 1. RADIO IRQ EVENTS
   // ==========================================================
-  //
-  // Consume one event at a time.
-  //
-  // The operation associated with the IRQ was captured by the
-  // ISR, so we do NOT infer it from the CURRENT radio state.
-  //
-  // This is the central race fix.
-  //
-  // ==========================================================
 
   RadioOperation eventOperation;
 
-
   if (takeRadioEvent(eventOperation)) {
 
-    // --------------------------------------------------------
-    // TX event
-    // --------------------------------------------------------
-
     if (eventOperation == RADIO_TX) {
-
-      // Only process as TX if this event really belongs to TX.
       handleTxEvent();
     }
-
-
-    // --------------------------------------------------------
-    // RX event
-    // --------------------------------------------------------
-
     else if (eventOperation == RADIO_RX) {
-
-      // Only process as RX if the ISR captured RX.
       handleRxEvent();
     }
-
-
-    // --------------------------------------------------------
-    // Unexpected event
-    // --------------------------------------------------------
-
     else {
-
-      Serial.println(
-        "⚠️ Radio IRQ received while state was IDLE."
-      );
-
-
-      // Do not blindly interpret it.
-      //
-      // First ensure the radio has a clean RX state.
+      Serial.println("⚠️ Radio IRQ received while state was IDLE.");
 
       setRadioOperation(RADIO_IDLE);
-
       clearRadioEvents();
 
-
-      if (
-        startReceiveSafely()
-        != RADIOLIB_ERR_NONE
-      ) {
-
+      if (startReceiveSafely() != RADIOLIB_ERR_NONE) {
         hardRadioReinit();
       }
     }
   }
-
 
   // ==========================================================
   // 2. LINK MAINTENANCE TRANSMISSION
   // ==========================================================
-  //
-  // This is NOT a radio watchdog.
-  //
-  // If both devices are sitting in RX because the link was lost,
-  // eventually one device transmits again.
-  //
-  // This prevents the classic:
-  //
-  //     RX <----> RX
-  //
-  // deadlock.
-  //
-  // ==========================================================
 
   if (
     getRadioOperation() == RADIO_RX &&
     !radioEventPending() &&
-    (int32_t)(
-      now - nextMaintenanceTxMs
-    ) >= 0
+    (int32_t)(now - nextMaintenanceTxMs) >= 0
   ) {
 
-    uint32_t silentTime =
-        now - lastValidPacketMs;
+    uint32_t silentTime = now - lastValidPacketMs;
 
-
-    if (
-      silentTime <
-      LINK_ACTIVITY_GRACE_MS
-    ) {
-
-      // A packet arrived recently.
-      // No need to transmit maintenance traffic.
+    if (silentTime < LINK_ACTIVITY_GRACE_MS) {
 
       scheduleMaintenanceTransmission();
 
     } else {
 
-/*      Serial.println(
-        "ℹ️ Link maintenance TX: no recent packet."
-      );*/
-
-
       if (!startOwnTransmission()) {
 
-        Serial.println(
-          "⚠️ Maintenance TX could not be started."
-        );
+        Serial.println("⚠️ Maintenance TX could not be started.");
 
-
-        // Make sure RX is restored.
-
-        if (
-          getRadioOperation() ==
-          RADIO_IDLE
-        ) {
+        if (getRadioOperation() == RADIO_IDLE) {
 
           clearRadioEvents();
 
-          if (
-            startReceiveSafely()
-            != RADIOLIB_ERR_NONE
-          ) {
-
+          if (startReceiveSafely() != RADIOLIB_ERR_NONE) {
             hardRadioReinit();
           }
         }
-
       }
-
 
       scheduleMaintenanceTransmission();
     }
   }
-
 
   // ==========================================================
   // 3. REAL SX1262 HEALTH CHECK
   // ==========================================================
-  //
-  // NO packet != radio failure.
-  //
-  // We only use this check to detect an SX1262 which no longer
-  // responds correctly over SPI.
-  //
-  // ==========================================================
 
   if (
     getRadioOperation() == RADIO_RX &&
     !radioEventPending() &&
-    (int32_t)(
-      now - nextHealthCheckMs
-    ) >= 0
+    (int32_t)(now - nextHealthCheckMs) >= 0
   ) {
 
     nextHealthCheckMs =
-        now +
-        RADIO_HEALTH_CHECK_INTERVAL_MS;
+        now + RADIO_HEALTH_CHECK_INTERVAL_MS;
 
+    uint32_t irqFlags = radio.getIrqFlags();
 
-    uint32_t irqFlags =
-        radio.getIrqFlags();
-
-
-    if (
-      irqFlags ==
-      0xFFFFFFFFUL
-    ) {
+    if (irqFlags == 0xFFFFFFFFUL) {
 
       radioHealthFailures++;
 
+      Serial.print("⚠️ SX1262 health check failed: ");
+      Serial.println(radioHealthFailures);
 
-      Serial.print(
-        "⚠️ SX1262 health check failed: "
-      );
-
-      Serial.println(
-        radioHealthFailures
-      );
-
-
-      if (
-        radioHealthFailures >=
-        RADIO_MAX_HEALTH_FAILURES
-      ) {
-
+      if (radioHealthFailures >= RADIO_MAX_HEALTH_FAILURES) {
         radioHealthFailures = 0;
-
         hardRadioReinit();
       }
 
     } else {
-
-      // SX1262 responds over SPI.
-      //
-      // A silent channel is therefore not considered a failure.
-
       radioHealthFailures = 0;
     }
   }
 
-
   // ==========================================================
   // 4. IDLE SAFETY NET
-  // ==========================================================
-  //
-  // The radio should normally never remain IDLE for long.
-  //
-  // However, if a transition failed, restore RX.
-  //
   // ==========================================================
 
   if (
@@ -1455,21 +903,11 @@ void loop()
 
     delay(1);
 
-
-    if (
-      startReceiveSafely()
-      != RADIOLIB_ERR_NONE
-    ) {
-
-      Serial.println(
-        "⚠️ Idle -> RX failed."
-      );
-
-
+    if (startReceiveSafely() != RADIOLIB_ERR_NONE) {
+      Serial.println("⚠️ Idle -> RX failed.");
       hardRadioReinit();
     }
   }
-
 
   // ==========================================================
   // 5. Yield
