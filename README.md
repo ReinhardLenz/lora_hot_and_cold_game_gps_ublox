@@ -444,15 +444,16 @@ to find the bearing (direction angle) from one GPS point to another, the functio
 
 #### Select the Environment
 
-The project has two build defined in platformio.ini:
+The project has three build defined in platformio.ini:
 
-- **sender** - Compiles sender.cpp + SendOwnInfo.cpp (GPS transmission)
-- **receiver** - Compiles only receive.cpp (LoRa receiver code)
+- **sender** - Compiles sender.cpp + SendOwnInfo.cpp (valid branch up to 3_config_file)
+- **receiver** - Compiles only receive.cpp (valid branch up to 3_config_file)
+- **pingpong** - Compiles only main.cpp (branch 4_ping_pong and later)
 
 Initiator project
 Build (#define INITIATING_NODE is not commented out)
 invitee project
-Build (#define INITIATING_NODE is not commented out)
+Build (#define INITIATING_NODE not commented out)
 
 
 #### Build & Upload to Receiver T-Beam
@@ -475,12 +476,6 @@ pio device monitor -e sender
 #### Monitor receiver (received messages)
 ```bash
 pio device monitor -e receiver
-```
-
-**Note:** If you have both T-Beams connected simultaneously, specify the correct COM port:
-```bash
-pio device monitor --port COM3   # Windows
-pio device monitor --port /dev/ttyUSB0  # Linux/Mac
 ```
 
 ## Prerequisites
@@ -513,6 +508,7 @@ pio device monitor --port /dev/ttyUSB0  # Linux/Mac
 -	Add a third Lora device, and develop triangulation or GPS calibration
 - Testing out different LORA radio Parameters, like spreading etc
 - adding  pygame based python scripts, that can simultaneously plot the route of the other beacon
+- use vibration motor belt instead of LED ring
 
 ## Graphical trace
 One T-beam is left at home connected to the computer, and the Serial outprint is running. The other T-beam is taken along for a walk. Then the distance and angle log is imported to Excel. with the formular r x sin(alpha) and r x cos(alpha) in Excel form looking like  = A46 x SIN(B46 x PI()/180) and  = A46 x COS(B46 x PI()/180) , one can then generate a X - Y scatter chart.
