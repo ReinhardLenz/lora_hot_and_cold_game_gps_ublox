@@ -122,73 +122,101 @@ In this branch GPS_bearing, the distance and bearing betwene "self" T-BEAM and "
 ### 3) (`main.cpp`)
 This sketch makes two ESP32 T‑Beam boards “take turns” talking over LoRa. One board starts by sending a first message (because #define INITIATING_NODE is enabled). After that, the devices alternate like a ping‑pong game:
 
-Step A (Transmit): send a LoRa packet
-Step B (Receive): wait for the other device’s packet, read it, then send your own GPS position back
-Repeat forever.
-The important idea is that LoRa sending/receiving is handled asynchronously: when you call radio.startTransmit(...) or radio.startReceive(), the radio works in the background. When it finishes (either a packet was sent or a packet was received), the radio triggers an interrupt on DIO1, and RadioLib calls your callback setFlag(). That callback only does one thing:
+
+
+
 ```csharp
+
+
 operationDone = true; 
+
+
 ```
 
-→ “Hey main loop, the radio finished something!”
 
-#### if (operationDone) { ... } 
-operationDone is like a doorbell. Most of the time it is false, and the loop() does basically nothing (it does not constantly poll the radio or block waiting).
 
-Only when the radio signals “I’m done” (send finished or receive finished), operationDone becomes true, and then this block runs:
+#### How it works (high level)
+Each node normally stays in **LoRa receive mode (RX)**.
+When a packet is received, an interrupt (DIO1) fires and the main loop reads and parses the payload.
 
-Enter the block only once per radio event
-The first thing it does is reset the doorbell:
-```csharp
-operationDone = false;
-```
-This prevents the code from running repeatedly for the same event.
+To avoid RX/TX race conditions between the interrupt and the main loop, the firmware uses:
+- a protected radio state (`IDLE`, `RX`, `TX`)
+- an IRQ event counter (no lost interrupts)
+- the ISR captures which operation (RX/TX) was active when the interrupt occurred
 
-Decide what just finished
-The code then checks transmitFlag to know whether the last operation was a transmit or a receive.
+#### Link recovery (quiet channel is not a failure)
+If both nodes end up listening (RX) and no packets arrive, the link can deadlock.
+A periodic **maintenance transmission** is used to “kick” the link back into activity when no valid packet has been received for a while.
 
-So if(operationDone) means:
- “Only react when the radio has completed an action.”
+#### Real radio health check
+Silence is treated as normal.
+A hard recovery is only triggered if the SX1262 appears unresponsive over SPI (repeated failed IRQ flag reads).
 
-#### if (transmitFlag) { ... } else { ... } 
-transmitFlag is like a mode marker that tells the program what it was doing last:
-```csharp
-transmitFlag == true 
-```
-→ “We just transmitted something, now we should switch to listening.”
+#### Serial output
+The firmware prints lines like:
 
 ```csharp
-transmitFlag == false 
+24.667753, 262.931436, 3, 3, true, true
 ```
-→ “We just received something (or were listening), now we should process it and transmit our reply.”
 
-##### Case 1: if (transmitFlag) (transmit just finished)
-This branch runs right after a send completes:
-
-It checks whether the send succeeded (transmissionState).
-Then it immediately switches the radio into receive mode:
-```csharp
-radio.startReceive();
-transmitFlag = false;
-
-```
-So after sending, the device becomes a listener, waiting for the other node’s response.
-
-##### Case 2: else (receive just finished)
-This branch runs when a packet has been received:
-
-It reads the received message (radio.readData(str)) and prints it.
-Then it reads GPS data for ~1 second, and if a fresh location is available it formats:
-"lat,lon\r\n"
-otherwise "No GPS\r\n"
-Finally it sends that message via LoRa:
+#### State diagrams
 
 ```csharp
-transmissionState = radio.startTransmit(msg);
-transmitFlag = true;
+stateDiagram-v2
+  [*] --> RX: startReceiveSafely()
+
+  RX --> IDLE: IRQ(RX done) / handleRxEvent()
+  IDLE --> RX: startReceiveSafely()
+
+  RX --> IDLE: prepareForTransmit() + finishReceive()
+  IDLE --> TX: startOwnTransmission() -> startTransmit()
+
+  TX --> IDLE: IRQ(TX done) / handleTxEvent()
+  IDLE --> RX: startReceiveSafely()
+
+  state "Hard recovery" as REC
+  RX --> REC: SPI health fails repeatedly
+  TX --> REC: finishTransmit/startReceive fails badly
+  IDLE --> REC: cannot restore RX
+  REC --> RX: hardRadioReinit() success
+
 ```
 
-So after receiving, the device prepares its “pong” (GPS position) and transmits it back.
+#### Mermaid diagram
+
+```csharp
+flowchart TD
+  A[loop() start: now=millis()] --> B{IRQ event pending? takeRadioEvent()}
+  B -- yes --> C{eventOperation == TX?}
+  C -- yes --> CTX[handleTxEvent(): finishTransmit -> startReceiveSafely]
+  C -- no --> D{eventOperation == RX?}
+  D -- yes --> CRX[handleRxEvent(): readData/parse -> startReceiveSafely]
+  D -- no --> CX[Unexpected IRQ: force IDLE, clear events, restart RX]
+
+  B -- no --> E{Maintenance TX due? \n(state==RX, no pending IRQ, timer expired)}
+  E -- yes --> F{silentTime < grace?}
+  F -- yes --> FS[Reschedule maintenance]
+  F -- no --> G[startOwnTransmission():\nfinish RX -> TX -> send GPS]
+  G --> FS
+
+  E -- no --> H{Health check due?\n(state==RX, no pending IRQ, timer expired)}
+  H -- yes --> I{getIrqFlags()==0xFFFFFFFF?}
+  I -- yes --> J[Increment failures;\nif >=3 -> hardRadioReinit()]
+  I -- no --> K[Reset failure counter]
+  H -- no --> L{IDLE safety net?\n(state==IDLE, no pending IRQ)}
+  L -- yes --> M[startReceiveSafely() else hardRadioReinit()]
+  L -- no --> N[delay(1)]
+  CTX --> N
+  CRX --> N
+  CX --> N
+  FS --> N
+  J --> N
+  K --> N
+  M --> N
+  N --> A
+```
+
+
 
 ### 4) Calculation of the angle and distance
 
