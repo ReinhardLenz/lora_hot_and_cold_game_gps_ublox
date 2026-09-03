@@ -1,5 +1,5 @@
 
-# Buddy finder compass LoRa Link (Sender + Receiver)
+# Buddy finder compass LoRa Link 
 
 <!--
 ## The main idea:
@@ -9,7 +9,6 @@ It’s like a “hot-and-cold” game, but instead of saying “warmer,” it si
 Imagine two friends each carrying a small “helper gadget” when they go hiking, exploring, or looking for something. 
 
 It is "off grid", not depending on access to phone or internet  
-
 
 ![Diagram](images/schematic_path_view.jpg)
 
@@ -86,7 +85,7 @@ Each LILYGO T-Beam LORA32 868MHz module is connected  with a BNO085 sensor throu
 
 ## **Component List**
 
-> 1. **LILYGO T-Beam Meshtastic LORA32 915MHz**  
+> 1. **LILYGO T-Beam Meshtastic LORA32 868MHz**  
    * **Description**: A microcontroller module with LoRa capabilities.  
    * **Pins**: TX, RX, 23, 4, 0, GND, 3V3, SCL/22, SDA/21, 3.3V, LoRa2, 5V, 2, 13, 14, 25, 33, 32, 35, 15, RST, VN, VP  
 
@@ -123,7 +122,7 @@ Each LILYGO T-Beam LORA32 868MHz module is connected  with a BNO085 sensor throu
 
 ## **Wiring Details**
 
-### **LILYGO T-Beam Meshtastic LORA32 915MHz**
+### **LILYGO T-Beam Meshtastic LORA32 868MHz**
 
 > * **Pin 15** is connected to **BNO085 SDA/MISO/TX**.  
 > * **Pin 14** is connected to **BNO085 SCL/SCK/RX**.  
@@ -133,14 +132,14 @@ Each LILYGO T-Beam LORA32 868MHz module is connected  with a BNO085 sensor throu
 
 ### **BNO085**
 
-> * **SDA/MISO/TX** is connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin 15**.  
-> * **SCL/SCK/RX** is connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin 14**.  
-> * **VCC** and **PS1** are connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin 3V3**.  
-> * **GND** and **PS0** are connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin GND**, **MT3608 VOUT-**, and **NEOPIXEL WS2812 45 LED RING GND**.
+> * **SDA/MISO/TX** is connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin 15**.  
+> * **SCL/SCK/RX** is connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin 14**.  
+> * **VCC** and **PS1** are connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin 3V3**.  
+> * **GND** and **PS0** are connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin GND**, **MT3608 VOUT-**, and **NEOPIXEL WS2812 45 LED RING GND**.
 
 ### **NEOPIXEL WS2812 45 LED RING**
 
-> * **GND** is connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin GND**, **BNO085 GND**, **PS0**, and **MT3608 VOUT-**.  
+> * **GND** is connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin GND**, **BNO085 GND**, **PS0**, and **MT3608 VOUT-**.  
 > * **D1** is connected to **Resistor pin1**.  
 > * **5V** is connected to **Electrolytic Capacitor \+** and **MT3608 VOUT+**.  
 > * **D0** is not connected.
@@ -153,7 +152,7 @@ Each LILYGO T-Beam LORA32 868MHz module is connected  with a BNO085 sensor throu
 ### **Resistor**
 
 > * **pin1** is connected to **NEOPIXEL WS2812 45 LED RING D1**.  
-> * **pin2** is connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin 13**.
+> * **pin2** is connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin 13**.
 
 ### **18650 in holder**
 
@@ -165,7 +164,7 @@ Each LILYGO T-Beam LORA32 868MHz module is connected  with a BNO085 sensor throu
 > * **VIN+** is connected to **18650 in holder VCC**.  
 > * **VIN-** is connected to **18650 in holder GND**.  
 > * **VOUT+** is connected to **NEOPIXEL WS2812 45 LED RING 5V**.  
-> * **VOUT-** is connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin GND**, **BNO085 GND**, **PS0**, and **NEOPIXEL WS2812 45 LED RING GND**.
+> * **VOUT-** is connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin GND**, **BNO085 GND**, **PS0**, and **NEOPIXEL WS2812 45 LED RING GND**.
 
 
 ---
@@ -195,7 +194,7 @@ LoRa operates in the license-free ISM bands (868 MHz in Europe, 915 MHz in North
 ## Software Overview
 
 This repository contains the program "main" using the **RadioLib** library to control the **SX1262 LoRa radio** on the T-Beam.
-In this branch GPS_bearing, the distance and bearing betwene "self" T-BEAM and "companion T-BEAM" is calculated.
+In this branch GPS_bearing, the distance and bearing between "self" T-BEAM and "companion T-BEAM" is calculated.
 
 ## Program Logic (How it works)
 
@@ -206,8 +205,6 @@ In this branch GPS_bearing, the distance and bearing betwene "self" T-BEAM and "
 
 ![Diagram](images/T-beam_data_bus_overview.jpg)
 
-
-
    - Configures the u-blox GPS to output only UBX binary protocol (disables NMEA sentences) Enables NAV-PVT (Position, Velocity, Time) messages at 1Hz rate on UART1
    - Initializing the GPS serial port:
     This opens a 9600 baud UART connection between the ESP32 and the GPS (pins 34 for receiving, 12 for transmitting).
@@ -215,7 +212,7 @@ In this branch GPS_bearing, the distance and bearing betwene "self" T-BEAM and "
    - Configuring the GPS:
     By default, the GPS sends many NMEA sentences (GGA, GSA, RMC, etc.). The program disables them all one by one by sending UBX configuration commands.
 
-   - Then it activates a single UBX message called NAV-PVT (which contains the    position, speed, time, altitude, etc.).
+   - Then it activates a single UBX message called NAV-PVT (which contains the  position, speed, time, altitude, etc.).
     For each command, it waits for the GPS acknowledgment response (ACK or NAK) and displays whether it was successful.
 
 
@@ -504,22 +501,21 @@ pio device monitor --port /dev/ttyUSB0  # Linux/Mac
 -Baud rate: 115200
 
 ## Usage
+-	Verify antenna is connected (T-beam is destroyed if no antenna connected)
 -	Flash Receiver firmware to one T-Beam.
 -	Flash Sender firmware to the other T-Beam.
+-  comment out #define INITIATING_NODE
 -	Power both devices (USB or battery).
--	Ensure both use the same frequency (868.0)
 -	Ensure LoRa parameters match (SF/BW/CR if you set them)
--	Verify antenna is connected
 -	Verify correct SX1262 pin mapping (RST/BUSY/DIO1/NSS)
 
 ## Future Improvements
--	Add BNO085 IMU sensor and compass
 -	Add a third Lora device, and develop triangulation or GPS calibration
 - Testing out different LORA radio Parameters, like spreading etc
 - adding  pygame based python scripts, that can simultaneously plot the route of the other beacon
 
 ## Graphical trace
-One T-beam is left at home connected to the computer, and the Serial outprint is running. The other T-beam is taken along for a walk. Then the distance and angle log is imported to Excel. with the formular r*sin(alpha) and r*cos(alpha) in Excel form looking like  =A46*SIN(B46*PI()/180) and  =A46*COS(B46*PI()/180) , one can then generate a scatter chart.
+One T-beam is left at home connected to the computer, and the Serial outprint is running. The other T-beam is taken along for a walk. Then the distance and angle log is imported to Excel. with the formular r x sin(alpha) and r x cos(alpha) in Excel form looking like  = A46 x SIN(B46 x PI()/180) and  = A46 x COS(B46 x PI()/180) , one can then generate a X - Y scatter chart.
 
 ![Diagram](images/phantom-map.jpg)
 
@@ -528,6 +524,9 @@ A random background map was used just for illustration purpose.
 ## Acknowledgements
 -	RadioLib library by Jan Gromeš and contributors
 -	LILYGO for the T-Beam hardware platform
+- Adafruit BNO08x library
+- Wolles Elektronikkiste for the UART connection of BNO085
+[Wolles Elektronikkiste](https://wolles-elektronikkiste.de/en/bno08x-9-dof-imus)
 ## License
 -	This project is licensed under the GNU License. See the LICENSE file for details.
 
