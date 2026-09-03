@@ -123,18 +123,6 @@ In this branch GPS_bearing, the distance and bearing betwene "self" T-BEAM and "
 This sketch makes two ESP32 T‑Beam boards “take turns” talking over LoRa. One board starts by sending a first message (because #define INITIATING_NODE is enabled). After that, the devices alternate like a ping‑pong game:
 
 
-
-
-```csharp
-
-
-operationDone = true; 
-
-
-```
-
-
-
 #### How it works (high level)
 Each node normally stays in **LoRa receive mode (RX)**.
 When a packet is received, an interrupt (DIO1) fires and the main loop reads and parses the payload.
@@ -216,6 +204,89 @@ flowchart TD
   N --> A
 ```
 
+Interrupt + event handling
+
+#### setFlag() (ISR)
+Minimal interrupt handler. It does not touch SPI or Serial. It only:
+captures current radioOperation into irqEventOperation
+increments irqEventCount
+
+#### takeRadioEvent(operation)
+Atomically checks if an IRQ event exists; if yes, consumes one event and returns the captured operation (RX/TX/IDLE). This is the core “no lost events + no misclassification” mechanism.
+
+#### radioEventPending()
+Just checks if irqEventCount != 0 (atomic). Used to avoid starting a new operation while an old event is still waiting.
+
+#### setRadioOperation(state) / getRadioOperation()
+Atomic setters/getters for the shared radio state.
+
+#### clearRadioEvents()
+Clears pending events. Used only when you know you are transitioning cleanly and want to discard stale IRQ bookkeeping.
+
+Radio configuration + safe transitions
+
+#### configureRadio()
+Applies LoRa parameters (SF10, BW125, CR4/7, TX power 14). Called in setup and after hard recovery.
+
+#### startReceiveSafely()
+Starts RX in a race-safe way:
+refuses to start if an IRQ event is still pending
+sets logical state to RADIO_RX before calling radio.startReceive()
+if start fails, returns to IDLE
+#### prepareForTransmit()
+Ensures you are not still receiving before TX:
+if in RX: calls radio.finishReceive() then sets IDLE
+clears old events
+prevents “TX while already TX”
+#### startOwnTransmission()
+The “send my GPS” action:
+calls prepareForTransmit()
+sets state to TX before starting transmit
+calls prepareAndSendOwnInfo() (which parses UBX and calls radio.startTransmit())
+if both fixes exist, computes and prints distance/bearing
+
+RX/TX completion handlers
+
+#### handleTxEvent()
+Runs when TX-done IRQ is consumed:
+sets state to IDLE
+finishTransmit()
+then restarts RX (startReceiveSafely())
+if anything fails badly → hardRadioReinit()
+
+#### handleRxEvent()
+Runs when RX-done IRQ is consumed:
+sets state to IDLE (important for race fix)
+readData(str)
+if OK: parse payload into companion (UbloxHelper_parseGpsPayload)
+restarts RX
+if restart fails → hardRadioReinit()
+Link maintenance + health recovery
+scheduleMaintenanceTransmission()
+Sets the next time a “maintenance TX” is allowed. Initiator and non-initiator use different intervals.
+hardRadioReinit()
+Full recovery path when the chip seems unhealthy:
+resets software state + clears events
+radio.reset(), then radio.begin()
+reapplies LoRa settings
+reinstalls DIO1 ISR
+restarts RX
+
+GPS-related modules
+
+#### AXP2101_beginAndEnableGPSPower()
+Powers the GPS rail via AXP2101 (DLDO1 3.3V). Without this, GPS may be off.
+
+#### UbloxHelper_configureUbxOnlyNavPvt()
+Configures u-blox to:
+disable NMEA on UART1
+enable UBX-NAV-PVT output
+configure constellations (GPS/Galileo/GLONASS)
+save config
+#### prepareAndSendOwnInfo()
+parses UBX stream (NAV-PVT) to update latest fix
+formats a text payload LAT=... LON=... valid=... fixType=...
+starts LoRa transmit
 
 
 ### 4) Calculation of the angle and distance
