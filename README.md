@@ -57,6 +57,8 @@ If the dog runs off, look at your lights.
 Turn until the “correct” light is in front.
 Walk that way, checking again as you go.
 
+![Diagram](images/schematic_path_view.jpg)
+
 ## Technical explanation
 
 A minimal two-device project using **two LILYGO T-Beam V1.2 (ESP32 + SX1262)** boards to communicate over **LoRa** in the **EU 868 MHz** band.
