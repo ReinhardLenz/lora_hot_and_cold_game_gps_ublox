@@ -295,13 +295,6 @@ For the distance calculation, the Haversine is used [Wikipedia about Haversine](
 
 to find the bearing (direction angle) from one GPS point to another, the function treats Earth like a sphere and uses trigonometry. First, it converts both locations’ latitude and longitude from degrees to radians (because math functions expect radians). Then it looks at the difference in longitude between the two points and computes two values that represent how far “east/west” and “north/south” the second point is relative to the first on the globe. Using atan2(y, x), it turns those into an angle. Finally, it converts the angle back to degrees and normalizes it to 0–360°, where 0° is north, 90° east.
 
-##### Terminal list during operation:
-dist       angle     fix1,fix1, valid1, valid2 
-17.166008, 143.877527, 3, 3, true, true
-15.602145, 148.784867, 3, 3, true, true
-15.526346, 141.979034, 3, 3, true, true
-17.158990, 129.280774, 3, 3, true, true
-...
 
 ## Features
 
