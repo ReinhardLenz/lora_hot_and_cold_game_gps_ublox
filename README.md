@@ -51,13 +51,16 @@ If you get separated, look at your LED compass ring ring.
 Turn your body until the “correct” LED is at the front.
 Walk that way.
 Check again sometimes (because your buddy may also be moving).
+
+![Diagram](images/schematic_path_view.jpg)
+
 ### Situation B: Finding your dog
 Put one gadget on the dog’s collar, and carry the other yourself.
 If the dog runs off, look at your lights.
 Turn until the “correct” light is in front.
 Walk that way, checking again as you go.
 
-![Diagram](images/schematic_path_view.jpg)
+
 
 ## Technical explanation
 
@@ -66,6 +69,104 @@ A minimal two-device project using **two LILYGO T-Beam V1.2 (ESP32 + SX1262)** b
 The program is  a "ping - pong" program between two ESP32 (T-BEAM) with LORA communication. Both T-BEAM transmit regularly their GPS position to each other. 
 
 Each LILYGO T-Beam LORA32 868MHz module is connected  with a BNO085 sensor through a UART bus. The LILYGO T-Beam serves as the main microcontroller and communication module, while the BNO085 sensor measures the spatial orientation of the device, i.e., where the device itself is pointing in relation to the North Pole.  Because the device knows its own orientation and also the location of the second "buddy" device, it now can calculate the direction in which the other buddy device is located. This direction is then displayed using a so-called WS2812B LED Pixel Individually Addressable Ring.
+
+
+---
+
+## Electrical circuit diagram
+
+![Diagram](images/T-Beam-BNO085-MP3608-Neopixel.png)
+
+## Photo
+
+![Diagram](images/2_devices_T-Beam_LED_ring.jpg)
+
+
+# **Circuit Documentation**
+
+## **Component List**
+
+> 1. **LILYGO T-Beam Meshtastic LORA32 915MHz**  
+   * **Description**: A microcontroller module with LoRa capabilities.  
+   * **Pins**: TX, RX, 23, 4, 0, GND, 3V3, SCL/22, SDA/21, 3.3V, LoRa2, 5V, 2, 13, 14, 25, 33, 32, 35, 15, RST, VN, VP  
+
+![Diagram](images/el-pin-meanings.jpg)
+
+> 2. **BNO085**  
+   * **Description**: A 9-axis sensor providing orientation and motion data.  
+   * **Pins**: VCC, GND, SCL/SCK/RX, SDA/MISO/TX, ADR/MOSI, CS, INT, RST, PS1, PS0  
+   
+   ![Setup Photo](images/GY-BNO085.webp)
+   
+> 3. **NEOPIXEL WS2812 45 LED RING**  
+   * **Description**: A ring of 45 individually addressable RGB LEDs.  
+   * **Pins**: GND, D1, 5V, D0  
+> 4. **Electrolytic Capacitor**  
+   * **Description**: A capacitor used for power smoothing.  
+   * **Properties**: Capacitance: 0.00047 Farads  
+   * **Pins**: \-, \+  
+
+   ![Setup Photo](images/Polarity-wet-Al-Elcaps.jpg)
+
+> 5. **Resistor**  
+   * **Description**: A resistor used for current limiting.  
+   * **Properties**: Resistance: 330 Ohms  
+   * **Pins**: pin1, pin2  
+
+> 6. **18650 in holder**  
+   * **Description**: A rechargeable lithium-ion battery in a holder.  
+   * **Pins**: GND, VCC  
+
+> 7. **MT3608**  
+   * **Description**: A DC-DC boost converter for voltage regulation.  
+   * **Pins**: VIN+, VIN-, VOUT+, VOUT-
+
+## **Wiring Details**
+
+### **LILYGO T-Beam Meshtastic LORA32 915MHz**
+
+> * **Pin 15** is connected to **BNO085 SDA/MISO/TX**.  
+> * **Pin 14** is connected to **BNO085 SCL/SCK/RX**.  
+> * **Pin 3V3** is connected to **BNO085 VCC** and **PS1**.  
+> * **Pin GND** is connected to **BNO085 GND**, **PS0**, **MT3608 VOUT-**, and **NEOPIXEL WS2812 45 LED RING GND**.  
+> * **Pin 13** is connected to **Resistor pin2**.
+
+### **BNO085**
+
+> * **SDA/MISO/TX** is connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin 15**.  
+> * **SCL/SCK/RX** is connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin 14**.  
+> * **VCC** and **PS1** are connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin 3V3**.  
+> * **GND** and **PS0** are connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin GND**, **MT3608 VOUT-**, and **NEOPIXEL WS2812 45 LED RING GND**.
+
+### **NEOPIXEL WS2812 45 LED RING**
+
+> * **GND** is connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin GND**, **BNO085 GND**, **PS0**, and **MT3608 VOUT-**.  
+> * **D1** is connected to **Resistor pin1**.  
+> * **5V** is connected to **Electrolytic Capacitor \+** and **MT3608 VOUT+**.  
+> * **D0** is not connected.
+
+### **Electrolytic Capacitor**
+
+> * **\-** is connected to **NEOPIXEL WS2812 45 LED RING GND**.  
+> * **\+** is connected to **NEOPIXEL WS2812 45 LED RING 5V**.
+
+### **Resistor**
+
+> * **pin1** is connected to **NEOPIXEL WS2812 45 LED RING D1**.  
+> * **pin2** is connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin 13**.
+
+### **18650 in holder**
+
+> * **GND** is connected to **MT3608 VIN-**.  
+> * **VCC** is connected to **MT3608 VIN+**.
+
+### **MT3608**
+
+> * **VIN+** is connected to **18650 in holder VCC**.  
+> * **VIN-** is connected to **18650 in holder GND**.  
+> * **VOUT+** is connected to **NEOPIXEL WS2812 45 LED RING 5V**.  
+> * **VOUT-** is connected to **LILYGO T-Beam Meshtastic LORA32 915MHz Pin GND**, **BNO085 GND**, **PS0**, and **NEOPIXEL WS2812 45 LED RING GND**.
+
 
 ---
 
@@ -86,6 +187,10 @@ LoRa operates in the license-free ISM bands (868 MHz in Europe, 915 MHz in North
 - Smart city sensors
 
 ---
+
+
+
+
 
 ## Software Overview
 
