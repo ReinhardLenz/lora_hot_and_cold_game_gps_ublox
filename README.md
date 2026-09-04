@@ -3,7 +3,7 @@
 
 4.9.2026: I have been testing the branch "9_recover_after_no_packet_received". It works basically, meaning the "optical compass needle" of each device is directing toward the "buddy" device.  There is no "potentiometer" in the circuit, evem though a variable "PotentiometerCorrection" is now in the program, but this is  static. I think the potentiometer will be needed, not because of the GPS, but because of the behaviour of the Inertial measuring device BNO085 ;inside the BNO085 is a self-calibrating device, and sometimes this self-calibration procedure kicks in seemingly without reason or cause and then changes the direction abruptly. 
 
-<!--
+
 ## The main idea:
 
 It’s like a “hot-and-cold” game, but instead of saying “warmer,” it simply points you in the right direction with a light.
@@ -12,41 +12,33 @@ Imagine two friends each carrying a small “helper gadget” when they go hikin
 
 It is "off grid", not depending on access to phone or internet  
 
-![Diagram](images/schematic_path_view.jpg)
-
-
 ## What the gadget does:
 - ✅ It knows which way you are facing
 Like a compass, it can tell whether you’re pointing toward north, south, east, or west. 
-
  
 - ✅ It knows where your buddy is (roughly)
 Your friend’s gadget and your gadget can “talk” to each other from far away, even if you can’t see each other.
-
  
 - ✅ It tells you which direction to walk to reach them
 Your gadget compares:
-
  
 - ✅ where you are,
 where your buddy is,
 and which way you’re facing,
 Then it figures out: “Your buddy is that way.”
-
  
 - ✅ It shows the direction in a super simple way
 Instead of showing a map or numbers, it uses a circle of lights:
-
  
 - ✅ If the buddy is in front of you, the LED at the “front” glows.
 If they’re to your left, the LED on the left glows.
 If they’re behind you, a LED at the back glows.
 So you just turn until the “go that way” LED is in front, then walk forward
- 
- -->
+
+
 ## How you’d use it in real life:
 
-### Situation A: Two people in the woods/mountains/desert
+### Situation A: Two people in the woods/mountains/desert/night
 Both people carry one gadget.
 If you get separated, look at your LED compass ring ring.
 Turn your body until the “correct” LED is at the front.
@@ -61,8 +53,6 @@ If the dog runs off, look at your lights.
 Turn until the “correct” light is in front.
 Walk that way, checking again as you go.
 
-
-
 ## Technical explanation
 
 A minimal two-device project using **two LILYGO T-Beam V1.2 (ESP32 + SX1262)** boards to communicate over **LoRa** in the **EU 868 MHz** band.
@@ -70,8 +60,6 @@ A minimal two-device project using **two LILYGO T-Beam V1.2 (ESP32 + SX1262)** b
 The program is  a "ping - pong" program between two ESP32 (T-BEAM) with LORA communication. Both T-BEAM transmit regularly their GPS position to each other. 
 
 Each LILYGO T-Beam LORA32 868MHz module is connected  with a BNO085 sensor through a UART bus. The LILYGO T-Beam serves as the main microcontroller and communication module, while the BNO085 sensor measures the spatial orientation of the device, i.e., where the device itself is pointing in relation to the North Pole.  Because the device knows its own orientation and also the location of the second "buddy" device, it now can calculate the direction in which the other buddy device is located. This direction is then displayed using a so-called WS2812B LED Pixel Individually Addressable Ring.
-
-
 ---
 
 ## Electrical circuit diagram
@@ -316,16 +304,12 @@ Interrupt + event handling
 Minimal interrupt handler. It does not touch SPI or Serial. It only:
 captures current radioOperation into irqEventOperation
 increments irqEventCount
-
 #### takeRadioEvent(operation)
 Atomically checks if an IRQ event exists; if yes, consumes one event and returns the captured operation (RX/TX/IDLE). This is the core “no lost events + no misclassification” mechanism.
-
 #### radioEventPending()
 Just checks if irqEventCount != 0 (atomic). Used to avoid starting a new operation while an old event is still waiting.
-
 #### setRadioOperation(state) / getRadioOperation()
 Atomic setters/getters for the shared radio state.
-
 #### clearRadioEvents()
 Clears pending events. Used only when you know you are transitioning cleanly and want to discard stale IRQ bookkeeping.
 
@@ -333,7 +317,6 @@ Radio configuration + safe transitions
 
 #### configureRadio()
 Applies LoRa parameters (SF10, BW125, CR4/7, TX power 14). Called in setup and after hard recovery.
-
 #### startReceiveSafely()
 Starts RX in a race-safe way:
 refuses to start if an IRQ event is still pending
@@ -359,7 +342,6 @@ sets state to IDLE
 finishTransmit()
 then restarts RX (startReceiveSafely())
 if anything fails badly → hardRadioReinit()
-
 #### handleRxEvent()
 Runs when RX-done IRQ is consumed:
 sets state to IDLE (important for race fix)
@@ -493,14 +475,11 @@ pio device monitor -e receiver
 - Upload
 - Monitor (Serial Monitor at 115200 baud)
 -Repeat for the receiver project, but comment out //#define INITIATING_NODE
-
 -Serial Monitor Settings
 -Baud rate: 115200
 
 ## Usage
 -	Verify antenna is connected (T-beam is destroyed if no antenna connected)
--	Flash Receiver firmware to one T-Beam.
--	Flash Sender firmware to the other T-Beam.
 -  comment out #define INITIATING_NODE
 -	Power both devices (USB or battery).
 -	Ensure LoRa parameters match (SF/BW/CR if you set them)
@@ -533,8 +512,7 @@ A random background map was used just for illustration purpose.
 ![Diagram](images/photo.jpg)
 2. 
 ![Diagram](images/dimensions.jpg)
-3.
-
+3. 
 ![Diagram](images/el-pin-meanings.jpg)
 
 
