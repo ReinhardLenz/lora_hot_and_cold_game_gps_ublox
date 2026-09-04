@@ -1,7 +1,7 @@
 
 # Buddy finder compass LoRa Link 
 
-4.9.2026: I have been testing the branch "9_recover_after_no_packet_received". It works with some limitations. There is no "potentiometer" in the circuit, evem though a variable "PotentiometerCorrection" is now in the program, but this is  static. I think the potentiometer will be needed, not because of the GPS, but because of the behaviour of the BNO085" ; the BNO085 is a self-calibrating device, and sometimes this self-calibration happens seemingly without reason or cause. 
+4.9.2026: I have been testing the branch "9_recover_after_no_packet_received". It works basically, meaning the "optical compass needle" of each device is directing toward the "buddy" device.  There is no "potentiometer" in the circuit, evem though a variable "PotentiometerCorrection" is now in the program, but this is  static. I think the potentiometer will be needed, not because of the GPS, but because of the behaviour of the Inertial measuring device BNO085 ;inside the BNO085 is a self-calibrating device, and sometimes this self-calibration procedure kicks in seemingly without reason or cause and then changes the direction abruptly. 
 
 <!--
 ## The main idea:
