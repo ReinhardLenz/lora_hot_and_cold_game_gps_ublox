@@ -263,6 +263,8 @@ stateDiagram-v2
 
 ```
 
+![Diagram](images/state_diagram.png)
+
 #### Mermaid diagram
 
 ```csharp
@@ -296,6 +298,9 @@ flowchart TD
   M --> N
   N --> A
 ```
+
+![Diagram](images/mermaidview-diagram.png)
+
 
 Interrupt + event handling
 
