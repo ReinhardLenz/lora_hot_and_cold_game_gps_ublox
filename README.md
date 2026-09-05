@@ -462,6 +462,12 @@ pio device monitor -e sender
 pio device monitor -e receiver
 ```
 
+#### Demonstration
+
+
+[![Demo video](https://img.youtube.com/vi/Y6eeUpzbeak/0.jpg)](https://www.youtube.com/watch?v=Y6eeUpzbeak)
+
+
 ## Prerequisites
 - Install VS Code
 - ✅ Install the PlatformIO extension
