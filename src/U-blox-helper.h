@@ -11,9 +11,12 @@ void UbloxHelper_begin(HardwareSerial& gpsSerial);
 // Flush pending bytes from GPS UART for a given time window
 void UbloxHelper_flushGpsInput(uint32_t ms);
 
+void UbloxHelper_pollAndPrintCFG_GNSS();
+
 // Configure u-blox: disable NMEA sentences and enable UBX-NAV-PVT on UART1
 // Returns true if NAV-PVT enable got ACK_OK (best-effort; NMEA disables are also attempted).
 bool UbloxHelper_configureUbxOnlyNavPvt();
 
 // Parse received LoRa payload into the unified struct (GpsInfo)
 bool UbloxHelper_parseGpsPayload(const String& str, GpsInfo& in);
+

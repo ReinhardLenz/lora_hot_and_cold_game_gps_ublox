@@ -57,10 +57,27 @@ void setup() {
   // Provide GPS serial to u-blox helper module and configure receiver output
   UbloxHelper_begin(GPSSerial);
 
-  bool ok = UbloxHelper_configureUbxOnlyNavPvt();
-  if (!ok) {
-    Serial.println("⚠️ u-blox config: NAV-PVT enable did not ACK (continuing anyway).");
-  }
+bool ok = UbloxHelper_configureUbxOnlyNavPvt();
+
+if (!ok) {
+
+  Serial.println();
+  Serial.println(F("⚠️ u-blox configuration FAILED."));
+  Serial.println(F("See the [u-blox] diagnostic immediately above for the exact failed step."));
+  Serial.println();
+
+}
+else {
+
+  Serial.println();
+  Serial.println(F("✅ u-blox configuration completed successfully."));
+  Serial.println();
+
+  // Diagnostic: ask receiver what CFG-GNSS configuration
+  // it currently has.
+  UbloxHelper_pollAndPrintCFG_GNSS();
+
+}
 
   // LoRa init
   Serial.println("SX126x Sender starting...");
