@@ -8,7 +8,7 @@
 #include "NavigationMath.h"
 #include <math.h>
 
-//#define INITIATING_NODE
+#define INITIATING_NODE
 
 
 double d = 0.0;
@@ -76,6 +76,11 @@ else {
   // Diagnostic: ask receiver what CFG-GNSS configuration
   // it currently has.
   UbloxHelper_pollAndPrintCFG_GNSS();
+
+  delay(1000);
+
+  UbloxHelper_pollAndPrintNAV_SAT();
+
 
 }
 

@@ -1076,3 +1076,385 @@ bool UbloxHelper_configureUbxOnlyNavPvt()
   return true;
 }
 
+// ------------------------------------------------------------
+// Poll UBX-NAV-SAT and print satellite information
+// ------------------------------------------------------------
+
+void UbloxHelper_pollAndPrintNAV_SAT()
+{
+  if (!s_gps) {
+    Serial.println(F("[u-blox] ERROR: no GPS serial for NAV-SAT poll"));
+    return;
+  }
+
+  Serial.println();
+  Serial.println(F("========== POLL UBX-NAV-SAT =========="));
+
+  // UBX-NAV-SAT poll:
+  //
+  // B5 62 01 35 00 00 CK_A CK_B
+  //
+  // Class = 01
+  // ID    = 35
+  // Length = 0
+
+  uint8_t msg[8];
+
+  msg[0] = 0xB5;
+  msg[1] = 0x62;
+  msg[2] = 0x01;
+  msg[3] = 0x35;
+  msg[4] = 0x00;
+  msg[5] = 0x00;
+
+  uint8_t ckA;
+  uint8_t ckB;
+
+  ubxChecksum(&msg[2], 4, ckA, ckB);
+
+  msg[6] = ckA;
+  msg[7] = ckB;
+
+  // Remove old GPS data
+  UbloxHelper_flushGpsInput(100);
+
+  Serial.print(F("[u-blox] Sending NAV-SAT poll: "));
+
+  for (uint8_t i = 0; i < sizeof(msg); i++) {
+    if (msg[i] < 0x10) Serial.print('0');
+    Serial.print(msg[i], HEX);
+    Serial.print(' ');
+  }
+
+  Serial.println();
+
+  s_gps->write(msg, sizeof(msg));
+  s_gps->flush();
+
+  Serial.println(F("[u-blox] Waiting for NAV-SAT response..."));
+
+
+  // ----------------------------------------------------------
+  // Receive UBX message
+  // ----------------------------------------------------------
+
+  uint8_t state = 0;
+
+  uint8_t cls = 0;
+  uint8_t id  = 0;
+
+  uint16_t len = 0;
+  uint16_t index = 0;
+
+  // NEO-M8 NAV-SAT can be considerably larger than 128 bytes.
+  // Allocate enough space for a useful number of satellites.
+  uint8_t payload[512];
+
+  uint8_t ckA_rx = 0;
+  uint8_t ckB_rx = 0;
+
+  uint32_t start = millis();
+
+  while (millis() - start < 3000) {
+
+    if (!s_gps->available()) {
+      delay(1);
+      continue;
+    }
+
+    uint8_t b = (uint8_t)s_gps->read();
+
+    switch (state) {
+
+      case 0:
+        if (b == 0xB5) {
+          state = 1;
+        }
+        break;
+
+
+      case 1:
+        if (b == 0x62) {
+          state = 2;
+        }
+        else {
+          state = 0;
+        }
+        break;
+
+
+      case 2:
+        cls = b;
+        state = 3;
+        break;
+
+
+      case 3:
+        id = b;
+        state = 4;
+        break;
+
+
+      case 4:
+        len = b;
+        state = 5;
+        break;
+
+
+      case 5:
+        len |= ((uint16_t)b << 8);
+
+        if (len > sizeof(payload)) {
+
+          Serial.print(F("[u-blox] ERROR: NAV-SAT response too large: "));
+          Serial.println(len);
+
+          return;
+        }
+
+        index = 0;
+        state = (len == 0) ? 7 : 6;
+        break;
+
+
+      case 6:
+        payload[index++] = b;
+
+        if (index >= len) {
+          state = 7;
+        }
+        break;
+
+
+      case 7:
+        ckA_rx = b;
+        state = 8;
+        break;
+
+
+      case 8:
+        ckB_rx = b;
+
+        // Calculate checksum
+        uint8_t header[4];
+
+        header[0] = cls;
+        header[1] = id;
+        header[2] = (uint8_t)(len & 0xFF);
+        header[3] = (uint8_t)(len >> 8);
+
+        uint8_t ckA_calc;
+        uint8_t ckB_calc;
+
+        ubxChecksum(header, 4, ckA_calc, ckB_calc);
+
+        for (uint16_t i = 0; i < len; i++) {
+          ckA_calc += payload[i];
+          ckB_calc += ckA_calc;
+        }
+
+        if (ckA_calc != ckA_rx || ckB_calc != ckB_rx) {
+
+          Serial.println(F("[u-blox] ERROR: NAV-SAT checksum incorrect."));
+          return;
+        }
+
+
+        // ----------------------------------------------------
+        // Verify message
+        // ----------------------------------------------------
+
+        if (cls != 0x01 || id != 0x35) {
+
+          Serial.print(F("[u-blox] Received class=0x"));
+          Serial.print(cls, HEX);
+
+          Serial.print(F(" id=0x"));
+          Serial.println(id, HEX);
+
+          Serial.println(F("[u-blox] This is not NAV-SAT."));
+          return;
+        }
+
+
+        if (len < 8) {
+
+          Serial.println(F("[u-blox] ERROR: NAV-SAT response too short."));
+          return;
+        }
+
+
+        // ----------------------------------------------------
+        // NAV-SAT header
+        //
+        // offset 0  = version
+        // offset 1  = numSvs
+        // offset 2  = reserved
+        // offset 3  = reserved
+        // ----------------------------------------------------
+
+        uint8_t version = payload[0];
+        uint8_t numSvs  = payload[1];
+
+        Serial.println();
+        Serial.println(F("[u-blox] NAV-SAT RESULT"));
+        Serial.println(F("----------------------------------------"));
+
+        Serial.print(F("Version       : "));
+        Serial.println(version);
+
+        Serial.print(F("Number SVs    : "));
+        Serial.println(numSvs);
+
+        Serial.println();
+
+
+        // ----------------------------------------------------
+        // Counters
+        // ----------------------------------------------------
+
+        uint8_t gpsTotal = 0;
+        uint8_t galTotal = 0;
+        uint8_t gloTotal = 0;
+
+        uint8_t gpsUsed = 0;
+        uint8_t galUsed = 0;
+        uint8_t gloUsed = 0;
+
+
+        // NAV-SAT satellite block = 12 bytes
+        //
+        // offset +0  = gnssId
+        // offset +1  = svId
+        // offset +2  = cno
+        // offset +3  = elev
+        // offset +4..5 = azim
+        // offset +6..9 = prRes
+        // offset +10..13 = flags
+        //
+        // NOTE:
+        // Depending on M8 firmware/protocol version,
+        // the NAV-SAT block layout may differ.
+        // We check the expected 12-byte structure below.
+
+        const uint16_t blockSize = 12;
+
+        if (len < 8 + ((uint16_t)numSvs * blockSize)) {
+
+          Serial.println(F("[u-blox] WARNING: NAV-SAT length does not"));
+          Serial.println(F("match the expected satellite block size."));
+          Serial.print(F("Length = "));
+          Serial.println(len);
+
+          return;
+        }
+
+
+        // ----------------------------------------------------
+        // Decode satellites
+        // ----------------------------------------------------
+
+        for (uint8_t i = 0; i < numSvs; i++) {
+
+          uint16_t o = 8 + i * blockSize;
+
+          uint8_t gnssId = payload[o + 0];
+          uint8_t svId   = payload[o + 1];
+          uint8_t cno    = payload[o + 2];
+
+          uint32_t flags =
+              ((uint32_t)payload[o + 8]) |
+              ((uint32_t)payload[o + 9] << 8) |
+              ((uint32_t)payload[o + 10] << 16) |
+              ((uint32_t)payload[o + 11] << 24);
+
+
+          // bit 3 = svUsed
+          bool used = (flags & (1UL << 3)) != 0;
+
+
+          if (gnssId == 0) {
+
+            gpsTotal++;
+
+            if (used) {
+              gpsUsed++;
+            }
+
+          }
+          else if (gnssId == 2) {
+
+            galTotal++;
+
+            if (used) {
+              galUsed++;
+            }
+
+          }
+          else if (gnssId == 6) {
+
+            gloTotal++;
+
+            if (used) {
+              gloUsed++;
+            }
+
+          }
+
+
+          // Print each satellite
+          Serial.print(F("SV "));
+          Serial.print(i);
+
+          Serial.print(F(": GNSS="));
+          Serial.print(gnssId);
+
+          Serial.print(F(" SV="));
+          Serial.print(svId);
+
+          Serial.print(F(" CNO="));
+          Serial.print(cno);
+
+          Serial.print(F(" used="));
+          Serial.println(used ? F("YES") : F("NO"));
+        }
+
+
+        // ----------------------------------------------------
+        // Summary
+        // ----------------------------------------------------
+
+        Serial.println();
+        Serial.println(F("----------------------------------------"));
+
+        Serial.print(F("GPS      total="));
+        Serial.print(gpsTotal);
+
+        Serial.print(F(" used="));
+        Serial.println(gpsUsed);
+
+
+        Serial.print(F("Galileo  total="));
+        Serial.print(galTotal);
+
+        Serial.print(F(" used="));
+        Serial.println(galUsed);
+
+
+        Serial.print(F("GLONASS  total="));
+        Serial.print(gloTotal);
+
+        Serial.print(F(" used="));
+        Serial.println(gloUsed);
+
+
+        Serial.println();
+        Serial.println(F("========== END NAV-SAT =========="));
+
+        return;
+    }
+  }
+
+
+  Serial.println(F("[u-blox] ERROR: Timeout waiting for NAV-SAT response."));
+}

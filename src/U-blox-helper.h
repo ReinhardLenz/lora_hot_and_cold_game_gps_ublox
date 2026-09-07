@@ -13,6 +13,8 @@ void UbloxHelper_flushGpsInput(uint32_t ms);
 
 void UbloxHelper_pollAndPrintCFG_GNSS();
 
+void UbloxHelper_pollAndPrintNAV_SAT();
+
 // Configure u-blox: disable NMEA sentences and enable UBX-NAV-PVT on UART1
 // Returns true if NAV-PVT enable got ACK_OK (best-effort; NMEA disables are also attempted).
 bool UbloxHelper_configureUbxOnlyNavPvt();
