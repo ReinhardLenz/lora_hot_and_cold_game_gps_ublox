@@ -11,13 +11,14 @@
 #include <compass.h>
 #include "LED.h"
 #include <FastLED.h>
+#include <potentiometer.h>
 
 // ============================================================
 // T-BEAM SX1262 GPS <-> LoRa communication
 // RECEIVE-STATE RACE FIX
 // ============================================================
 
-#define INITIATING_NODE
+//#define INITIATING_NODE
 
 // --------------------
 // BNO085 UART
@@ -33,7 +34,9 @@ LedRing ledRing(LED_COUNT, static_cast<uint8_t>(PIN_LED_RING));
 // ============================================================
 // NEW: Potentiometer correction (global, persistent)
 // ============================================================
-static float PotentiometerCorrection = 0.0f;   // set in setup() for now
+static constexpr uint8_t ADC_PIN = 36;
+//static float PotentiometerCorrection = 0.0f;   // set in setup() for now
+int PotentiometerCorrection_degrees = 0;
 
 // Helper: normalize degrees to [0, 360)
 static float normalizeDeg360(float deg) {
@@ -501,8 +504,9 @@ void setup()
 {
   Serial.begin(115200);
   ledRing.begin(LED_BRIGHTNESS);
+  InitPotentiometerLedMapper();
   // NEW: initialize correction (later replace with analogRead)
-  PotentiometerCorrection = 0.0f;
+  //PotentiometerCorrection = 0.0f;
 
   // --------------------
   // start BNO085 UART
@@ -797,11 +801,12 @@ void loop()
   // 0) Compass + per-iteration corrected yaw
   // ----------------------------------------------------------
   compass.processSensor();
+  PotentiometerCorrection_degrees = UpdatePotentiometerCorrectionDegrees(ADC_PIN);
 
   // NEW: per-iteration variable (valid only during this loop iteration)
   float CorrectedYaw =
       normalizeDeg360(
-        PotentiometerCorrection-compass.getYawNorthDeg() 
+        PotentiometerCorrection_degrees-compass.getYawNorthDeg() 
       );
 
   // NEW: per-iteration companion bearing relative to corrected yaw

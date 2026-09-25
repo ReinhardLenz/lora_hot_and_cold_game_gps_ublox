@@ -70,90 +70,247 @@ The program is  a "ping - pong" program between two ESP32 (T-BEAM) with LORA com
 ![Diagram](images/2_devices_T-Beam_LED_ring.jpg)
 
 
-# **Circuit Documentation**
 
-## **Component List**
 
-> 1. **LILYGO T-Beam Meshtastic LORA32 868MHz**  
-   * **Description**: A microcontroller module with LoRa capabilities.  
-   * **Pins**: TX, RX, 23, 4, 0, GND, 3V3, SCL/22, SDA/21, 3.3V, LoRa2, 5V, 2, 13, 14, 25, 33, 32, 35, 15, RST, VN, VP  
+## ---
+
+**2\. Component List**
+
+### **2.1 LILYGO T-Beam Meshtastic LORA32 915 MHz**
+
+**Function:**  
+Main controller and communications platform.  
+**Primary functions in this circuit:**
+
+> * Runs the ESP32 firmware.  
+> * Interfaces with the BNO085 orientation sensor.  
+> * Reads the potentiometer.  
+> * Controls the NeoPixel ring.  
+> * Communicates using the integrated SX1262 LoRa radio.  
+> * Controls GPS power through the onboard AXP2101 power-management IC.  
+> * Provides the 3.3 V logic and sensor supply.  
+> * Provides the battery-independent boost-converter control interface through the rest of the system.
+
+Relevant pins used by this circuit include:
+
+> * 3V3 — 3.3 V supply for the BNO085 and potentiometer.  
+> * GND — circuit ground.  
+> * 14 — BNO085 clock/receive-side interface connection.  
+> * 15 — BNO085 data/transmit-side interface connection.  
+> * 13 — NeoPixel data output.  
+> * VP — potentiometer wiper analog input.
 
 ![Diagram](images/el-pin-meanings.jpg)
 
-> 2. **BNO085**  
-   * **Description**: A 9-axis sensor providing orientation and motion data.  
-   * **Pins**: VCC, GND, SCL/SCK/RX, SDA/MISO/TX, ADR/MOSI, CS, INT, RST, PS1, PS0  
-   
+The board also contains the LoRa radio used by the firmware, although the radio connections are internal to the T-Beam and are not listed as external nets.
+
+### ---
+
+**2.2 BNO085**
+
+**Function:**  
+Orientation and rotation-vector sensor.  
+The firmware uses the BNO085 rotation-vector report to calculate yaw. The calculated yaw is converted to degrees and used to determine the direction displayed on the LED ring.  
+The sensor is operated using its serial-compatible interface in the supplied wiring:
+
+> * SDA/MISO/TX  
+> * SCL/SCK/RX
+
+The PS1 and PS0 pins select the sensor interface mode. In this circuit, they are tied to 3.3 V and ground respectively.
+
    ![Setup Photo](images/GY-BNO085.webp)
-   
-> 3. **NEOPIXEL WS2812 45 LED RING**  
-   * **Description**: A ring of 45 individually addressable RGB LEDs.  
-   * **Pins**: GND, D1, 5V, D0  
-> 4. **Electrolytic Capacitor**  
-   * **Description**: A capacitor used for power smoothing.  
-   * **Properties**: Capacitance: 0.00047 Farads  
-   * **Pins**: \-, \+  
 
-   ![Setup Photo](images/Polarity-wet-Al-Elcaps.jpg)
+### ---
 
-> 5. **Resistor**  
-   * **Description**: A resistor used for current limiting.  
-   * **Properties**: Resistance: 330 Ohms  
-   * **Pins**: pin1, pin2  
+**2.3 NEOPIXEL WS2812 45 LED RING**
 
-> 6. **18650 in holder**  
-   * **Description**: A rechargeable lithium-ion battery in a holder.  
-   * **Pins**: GND, VCC  
+**Function:**  
+Visual direction indicator.  
+The firmware lights one LED corresponding to the calculated companion bearing. The ring contains 45 addressable WS2812-type RGB LEDs.  
+The ring receives:
 
-> 7. **MT3608**  
-   * **Description**: A DC-DC boost converter for voltage regulation.  
-   * **Pins**: VIN+, VIN-, VOUT+, VOUT-
+> * Approximately 5 V power from the MT3608.  
+> * Ground from the common circuit ground.  
+> * A serial data signal from T-Beam pin 13\.
 
-## **Wiring Details**
+The D0 pin is not connected in the supplied wiring. The ring is therefore driven through D1.
 
-### **LILYGO T-Beam Meshtastic LORA32 868MHz**
 
-> * **Pin 15** is connected to **BNO085 SDA/MISO/TX**.  
-> * **Pin 14** is connected to **BNO085 SCL/SCK/RX**.  
-> * **Pin 3V3** is connected to **BNO085 VCC** and **PS1**.  
-> * **Pin GND** is connected to **BNO085 GND**, **PS0**, **MT3608 VOUT-**, and **NEOPIXEL WS2812 45 LED RING GND**.  
-> * **Pin 13** is connected to **Resistor pin2**.
 
-### **BNO085**
+### ---
 
-> * **SDA/MISO/TX** is connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin 15**.  
-> * **SCL/SCK/RX** is connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin 14**.  
-> * **VCC** and **PS1** are connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin 3V3**.  
-> * **GND** and **PS0** are connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin GND**, **MT3608 VOUT-**, and **NEOPIXEL WS2812 45 LED RING GND**.
+**2.4 18650 Battery Holder**
 
-### **NEOPIXEL WS2812 45 LED RING**
+**Function:**  
+Single-cell battery source.  
+The holder provides the input supply to the MT3608 boost converter:
 
-> * **GND** is connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin GND**, **BNO085 GND**, **PS0**, and **MT3608 VOUT-**.  
-> * **D1** is connected to **Resistor pin1**.  
-> * **5V** is connected to **Electrolytic Capacitor \+** and **MT3608 VOUT+**.  
-> * **D0** is not connected.
+> * VCC connects to VIN+.  
+> * GND connects to VIN-.
 
-### **Electrolytic Capacitor**
+The design assumes a suitable protected 18650 cell or an equivalent battery-protection arrangement. The battery voltage varies with charge state and should remain within the MT3608 input specification.
 
-> * **\-** is connected to **NEOPIXEL WS2812 45 LED RING GND**.  
-> * **\+** is connected to **NEOPIXEL WS2812 45 LED RING 5V**.
+### ---
 
-### **Resistor**
+**2.5 MT3608 Boost Converter**
 
-> * **pin1** is connected to **NEOPIXEL WS2812 45 LED RING D1**.  
-> * **pin2** is connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin 13**.
+**Function:**  
+Raises the 18650 battery voltage to the voltage required by the NeoPixel ring.  
+The converter input is connected to the battery holder. Its output is connected to the LED ring:
 
-### **18650 in holder**
+> * VIN+ — battery positive.  
+> * VIN- — battery negative.  
+> * VOUT+ — NeoPixel ring 5 V supply.  
+> * VOUT- — common ground.
 
-> * **GND** is connected to **MT3608 VIN-**.  
-> * **VCC** is connected to **MT3608 VIN+**.
+The MT3608 output voltage must be adjusted and verified before connecting the LED ring. A nominal 5 V output is recommended for the specified LED ring.
 
-### **MT3608**
+### ---
 
-> * **VIN+** is connected to **18650 in holder VCC**.  
-> * **VIN-** is connected to **18650 in holder GND**.  
-> * **VOUT+** is connected to **NEOPIXEL WS2812 45 LED RING 5V**.  
-> * **VOUT-** is connected to **LILYGO T-Beam Meshtastic LORA32 868MHz Pin GND**, **BNO085 GND**, **PS0**, and **NEOPIXEL WS2812 45 LED RING GND**.
+**2.6 Potentiometer**
+
+**Function:**  
+Provides a user-adjustable heading correction.  
+The potentiometer is wired as a voltage divider:
+
+> * A — connected to 3.3 V.  
+> * E — connected to ground.  
+> * S — wiper output connected to T-Beam pin VP.
+
+The firmware reads the wiper voltage using ESP32 ADC pin 36 and maps the ADC range to an angular correction of approximately 0–360 degrees.
+
+## ---
+
+**3\. Component Wiring Details**
+
+## **3.1 LILYGO T-Beam Meshtastic LORA32 915 MHz Wiring**
+
+| T-Beam pin | Connected to | Function   |
+| :---- | :---- | :---- |
+| 3V3 | BNO085 VCC | 3.3 V sensor supply |
+| 3V3 | BNO085 PS1 | Interface-mode selection |
+| 3V3 | Potentiometer A | Potentiometer supply |
+| GND | BNO085 GND | Common ground |
+| GND | BNO085 PS0 | Interface-mode selection |
+| GND | MT3608 VOUT- | Common ground |
+| GND | Potentiometer E | Potentiometer ground |
+| GND | NeoPixel ring GND | LED-ring ground |
+| 15 | BNO085 SDA/MISO/TX | BNO085 serial data connection |
+| 14 | BNO085 SCL/SCK/RX | BNO085 serial clock/data connection |
+| 13 | NeoPixel ring D1 | WS2812 data signal |
+| VP | Potentiometer S | Analog wiper input |
+
+### **Unconnected T-Beam pins of interest**
+
+The following T-Beam pins appear in the part definition but are not connected by the supplied net list:
+
+> * TX  
+> * RX  
+> * 23  
+> * 4  
+> * 0  
+> * SCL/22  
+> * SDA/21  
+> * LoRa2  
+> * 5V  
+> * 2  
+> * 25  
+> * 33  
+> * 32  
+> * 35  
+> * RST  
+> * VN
+
+The integrated LoRa radio is used by the software, but its internal connections are not represented as external wiring in the supplied net list.
+
+## ---
+
+**3.2 BNO085 Wiring**
+
+| BNO085 pin | Connected to | Function   |
+| :---- | :---- | :---- |
+| VCC | T-Beam 3V3 | 3.3 V supply |
+| GND | T-Beam GND | Ground |
+| PS1 | T-Beam 3V3 | Interface-mode configuration |
+| PS0 | T-Beam GND | Interface-mode configuration |
+| SDA/MISO/TX | T-Beam 15 | Serial data connection |
+| SCL/SCK/RX | T-Beam 14 | Serial clock/data connection |
+
+The following BNO085 pins are not connected in the supplied net list:
+
+> * ADR/MOSI  
+> * CS  
+> * INT  
+> * RST
+
+### **Interface note**
+
+The BNO085 is configured in the firmware using the Adafruit begin\_UART() method on Serial2. The exact UART signal direction and the required board-specific pin mapping should be checked against the particular BNO085 breakout board. The supplied net list identifies the connections as T-Beam pins 14 and 15, but the code refers to configuration macros PIN\_BNO\_RX and PIN\_BNO\_TX, whose definitions are not included.
+
+## ---
+
+**3.3 NeoPixel WS2812 45 LED Ring Wiring**
+
+| LED-ring pin | Connected to | Function   |
+| :---- | :---- | :---- |
+| 5V | MT3608 VOUT+ | LED-ring supply |
+| GND | Common ground | LED-ring return |
+| D1 | T-Beam 13 | WS2812 data input |
+
+The D0 pin is not connected.
+
+### **Power considerations**
+
+A 45-LED WS2812 ring can require substantial current when many LEDs are illuminated at high brightness. The maximum theoretical current can approach approximately:
+
+> * 60 mA per LED at full white  
+> * Approximately 2.7 A for 45 LEDs
+
+The supplied firmware sets a configurable brightness, which reduces typical current consumption. The MT3608, battery, wiring, and connectors must nevertheless be rated for the expected load.  
+A bulk capacitor near the LED-ring power input and a suitable series resistor in the data line are commonly recommended, although neither is included in the supplied component list.
+
+## ---
+
+**3.4 18650 Battery Holder Wiring**
+
+| Battery-holder pin | Connected to | Function   |
+| :---- | :---- | :---- |
+| VCC | MT3608 VIN+ | Battery positive |
+| GND | MT3608 VIN- | Battery negative |
+
+The battery holder has no direct connection to the T-Beam in the supplied net list. The T-Beam’s own power input and battery-management connections are therefore not documented by the provided wiring data.
+
+## ---
+
+**3.5 MT3608 Boost Converter Wiring**
+
+| MT3608 pin | Connected to | Function   |
+| :---- | :---- | :---- |
+| VIN+ | 18650 holder VCC | Battery input positive |
+| VIN- | 18650 holder GND | Battery input negative |
+| VOUT+ | NeoPixel ring 5V | Boosted LED supply |
+| VOUT- | Common ground | Boosted supply return |
+
+The MT3608 output voltage should be set with a multimeter before connecting the LED ring. The output should be adjusted to the required LED-ring voltage, normally approximately 5 V.
+
+## ---
+
+**3.6 Potentiometer Wiring**
+
+| Potentiometer pin | Connected to | Function   |
+| :---- | :---- | :---- |
+| A | T-Beam 3V3 | Upper voltage-divider supply |
+| E | Common ground | Lower voltage-divider return |
+| S | T-Beam VP | Wiper voltage |
+
+The firmware reads the analog voltage and maps it to an angular correction:
+
+> * Minimum wiper voltage: approximately 0 degrees.  
+> * Maximum wiper voltage: approximately 360 degrees.
+
+The actual direction of increasing correction depends on which outer potentiometer terminal is connected to 3.3 V.
+
+
 
 
 ---
