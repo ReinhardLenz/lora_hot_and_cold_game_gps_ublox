@@ -200,26 +200,6 @@ The firmware reads the wiper voltage using ESP32 ADC pin 36 and maps the ADC ran
 | 13 | NeoPixel ring D1 | WS2812 data signal |
 | VP | Potentiometer S | Analog wiper input |
 
-### **Unconnected T-Beam pins of interest**
-
-The following T-Beam pins appear in the part definition but are not connected by the supplied net list:
-
-> * TX  
-> * RX  
-> * 23  
-> * 4  
-> * 0  
-> * SCL/22  
-> * SDA/21  
-> * LoRa2  
-> * 5V  
-> * 2  
-> * 25  
-> * 33  
-> * 32  
-> * 35  
-> * RST  
-> * VN
 
 The integrated LoRa radio is used by the software, but its internal connections are not represented as external wiring in the supplied net list.
 
@@ -236,16 +216,7 @@ The integrated LoRa radio is used by the software, but its internal connections 
 | SDA/MISO/TX | T-Beam 15 | Serial data connection |
 | SCL/SCK/RX | T-Beam 14 | Serial clock/data connection |
 
-The following BNO085 pins are not connected in the supplied net list:
 
-> * ADR/MOSI  
-> * CS  
-> * INT  
-> * RST
-
-### **Interface note**
-
-The BNO085 is configured in the firmware using the Adafruit begin\_UART() method on Serial2. The exact UART signal direction and the required board-specific pin mapping should be checked against the particular BNO085 breakout board. The supplied net list identifies the connections as T-Beam pins 14 and 15, but the code refers to configuration macros PIN\_BNO\_RX and PIN\_BNO\_TX, whose definitions are not included.
 
 ## ---
 
@@ -267,7 +238,6 @@ A 45-LED WS2812 ring can require substantial current when many LEDs are illumina
 > * Approximately 2.7 A for 45 LEDs
 
 The supplied firmware sets a configurable brightness, which reduces typical current consumption. The MT3608, battery, wiring, and connectors must nevertheless be rated for the expected load.  
-A bulk capacitor near the LED-ring power input and a suitable series resistor in the data line are commonly recommended, although neither is included in the supplied component list.
 
 ## ---
 
@@ -278,7 +248,6 @@ A bulk capacitor near the LED-ring power input and a suitable series resistor in
 | VCC | MT3608 VIN+ | Battery positive |
 | GND | MT3608 VIN- | Battery negative |
 
-The battery holder has no direct connection to the T-Beam in the supplied net list. The T-Beam’s own power input and battery-management connections are therefore not documented by the provided wiring data.
 
 ## ---
 
