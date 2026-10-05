@@ -78,6 +78,8 @@ How the box parts look like:
 
 [Box parts view](https://raikkulenz.kapsi.fi/downloadfolder_not_protected/lora_hot_and_cold_game_gps_ublox-kotelo-osat.pdf)
 
+A zip file with the #D- printable stl files:
+
 [Box parts stl files](https://raikkulenz.kapsi.fi/downloadfolder_not_protected/lora_hot_and_cold_game_gps_ublox-stl-parts.zip)
 
 
