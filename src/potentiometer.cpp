@@ -8,7 +8,7 @@ void InitPotentiometerLedMapper() {
   delay(200);
   analogReadResolution(12);                   // 0..4095
   analogSetPinAttenuation(36, ADC_11db);      // ~0..3.3V range (pin is fixed on your board)
-  Serial.println("ESP32 ADC->45-LED ring mapper started.");
+  //Serial.println("ESP32 ADC->45-LED ring mapper started.");
 }
 
 int UpdatePotentiometerCorrectionDegrees(uint8_t adcPin) {
