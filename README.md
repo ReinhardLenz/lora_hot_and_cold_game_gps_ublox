@@ -69,6 +69,16 @@ The program is  a "ping - pong" program between two ESP32 (T-BEAM) with LORA com
 
 ![Diagram](images/2_devices_T-Beam_LED_ring.jpg)
 
+## Box
+
+How the box parts look like:
+
+![Diagram](images/box_parts.png)
+
+
+[Box parts view](https://raikkulenz.kapsi.fi/downloadfolder_not_protected/lora_hot_and_cold_game_gps_ublox-kotelo-osat.pdf)
+
+[Box parts stl files](https://raikkulenz.kapsi.fi/downloadfolder_not_protected/lora_hot_and_cold_game_gps_ublox-stl-parts.zip)
 
 
 
