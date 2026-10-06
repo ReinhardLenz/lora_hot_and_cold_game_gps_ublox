@@ -91,9 +91,9 @@ A zip file with the #D- printable stl files:
 
 **2\. Component List**
 
-## List
+## Shopping List
 
-[shopping basket](https://linktr.ee/hot_cold_game)
+[link to a shopping basket](https://linktr.ee/hot_cold_game)
 
 ### **2.1 LILYGO T-Beam Meshtastic LORA32 915 MHz**
 
