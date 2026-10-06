@@ -71,7 +71,7 @@ The program is  a "ping - pong" program between two ESP32 (T-BEAM) with LORA com
 
 ## Box
 
-How the box parts look like:
+picture of box with electronic parts inside:
 
 ![Diagram](images/hot-cold-box.png)
 
@@ -90,6 +90,10 @@ A zip file with the #D- printable stl files:
 ## ---
 
 **2\. Component List**
+
+## List
+
+[shopping basket](https://linktr.ee/hot_cold_game)
 
 ### **2.1 LILYGO T-Beam Meshtastic LORA32 915 MHz**
 
