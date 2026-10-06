@@ -91,7 +91,7 @@ A zip file with the #D- printable stl files:
 
 **2\. Component List**
 
-## Shopping List
+#### Shopping List linktree
 
 [link to a shopping basket](https://linktr.ee/hot_cold_game)
 
