@@ -69,6 +69,12 @@ The program is  a "ping - pong" program between two ESP32 (T-BEAM) with LORA com
 
 ![Diagram](images/2_devices_T-Beam_LED_ring.jpg)
 
+
+## Photo with #D- printed box
+
+![Diagram](images/boxes_with_antennas.jpg)
+
+
 ## Box
 
 picture of box with electronic parts inside:
