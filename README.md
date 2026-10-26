@@ -65,9 +65,9 @@ The program is  a "ping - pong" program between two ESP32 (T-BEAM) with LORA com
 
 ![Diagram](images/circuit_image_potentiometer.png)
 
-## Photo test setup
+## Photo wired boxes
 
-![Diagram](images/2_devices_T-Beam_LED_ring.jpg)
+![Diagram](images/both_wired.jpg)
 
 
 ## Photo with 3D- printed box
