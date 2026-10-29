@@ -87,9 +87,11 @@ The parts to be printed:
 
 [Box parts view](https://raikkulenz.kapsi.fi/downloadfolder_not_protected/lora_hot_and_cold_game_gps_ublox-kotelo-osat.pdf)
 
-A zip file with the #D- printable stl files:
+A zip file with the 3D- printable stl files:
 
 [Box parts stl files](https://raikkulenz.kapsi.fi/downloadfolder_not_protected/lora_hot_and_cold_game_gps_ublox-stl-parts.zip)
+
+A 7z zip file with the prt files, that can be modified:
 
 [Box parts siemens NX prt files](https://raikkulenz.kapsi.fi/downloadfolder_not_protected/NX-lora_hot_and_cold_game_gps_ublox-prt-parts.7z)
 
