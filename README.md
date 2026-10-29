@@ -91,6 +91,7 @@ A zip file with the #D- printable stl files:
 
 [Box parts stl files](https://raikkulenz.kapsi.fi/downloadfolder_not_protected/lora_hot_and_cold_game_gps_ublox-stl-parts.zip)
 
+[Box parts siemens NX prt files](https://raikkulenz.kapsi.fi/downloadfolder_not_protected/NX-lora_hot_and_cold_game_gps_ublox-prt-parts.7z)
 
 
 ## ---
